@@ -1,4 +1,3 @@
---asdasd
 -- init.sql
 BEGIN;
 
@@ -61,7 +60,7 @@ CREATE TABLE menu_item_ingredients (
 
 CREATE TABLE orders (
     id SERIAL PRIMARY KEY,
-    customer_name TEXT NOT NULL,
+    customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
     status order_status NOT NULL DEFAULT 'pending',
     payment_method payment_method,
     total_price DECIMAL(10,2) NOT NULL CHECK (total_price >= 0),
@@ -77,6 +76,17 @@ CREATE TABLE order_items (
     quantity INTEGER NOT NULL CHECK (quantity > 0),
     customizations JSONB,
     price_at_order DECIMAL(10,2) NOT NULL CHECK (price_at_order >= 0)
+);
+
+CREATE TABLE customers (
+    id SERIAL PRIMARY KEY,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    phone TEXT UNIQUE,
+    email TEXT UNIQUE,
+    loyalty_points INTEGER DEFAULT 0,
+    preferences JSONB, -- e.g., {"favorite_drink": "latte", "milk_preference": "oat"}
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ========================
@@ -182,14 +192,7 @@ INSERT INTO menu_item_ingredients VALUES
 (4, 4, 20);  -- Chocolate Cake: 20ml syrup
 
 -- Orders with order items
-INSERT INTO orders (customer_name, status, total_price) VALUES
-('Alice Johnson', 'delivered', 6.00),
-('Bob Smith', 'ready', 8.50);
 
-INSERT INTO order_items (order_id, menu_item_id, quantity, price_at_order) VALUES
-(1, 1, 2, 2.50),  -- 2 Espressos
-(2, 2, 1, 3.50),   -- 1 Latte
-(2, 4, 1, 4.50);   -- 1 Chocolate Cake
 
 -- ========================
 -- 7. Update Search Vectors
