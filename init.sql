@@ -49,6 +49,7 @@ CREATE TABLE inventory (
     reorder_level DECIMAL(10,3),
     supplier_info JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW()
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE menu_item_ingredients (
