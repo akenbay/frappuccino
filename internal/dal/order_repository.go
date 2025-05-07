@@ -28,10 +28,10 @@ func NewOrderRepository(db *sql.DB) OrderRepository {
 func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order) (int, error) {
 	var id int
 	err := r.db.QueryRowContext(ctx, `
-		INSERT INTO orders (customer_id, payment_method, status, total_price, special_instructions) 
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO orders (customer_id, payment_method, total_price, special_instructions) 
+		VALUES ($1, $2, $3, $4)
 		RETURNING id`,
-		order.CustomerID, order.PaymentMethod, order.Status, order.TotalPrice, order.SpecialInstructions,
+		order.CustomerID, order.PaymentMethod, order.TotalPrice, order.SpecialInstructions,
 	).Scan(&id)
 
 	if err != nil {
