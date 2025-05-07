@@ -124,3 +124,79 @@ func (r *orderRepository) GetOrderByID(ctx context.Context, id int) (models.Orde
 	order.Items = items
 	return order, nil
 }
+
+func (r *orderRepository) UpdateOrder(ctx context.Context, id int, order models.Order) error {
+	// Begin transaction
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 1. Update order metadata
+	result, err := tx.ExecContext(ctx, `
+        UPDATE orders 
+        SET 
+            customer_id = $1,
+            status = $2,
+            payment_method = $3,
+            total_price = $4,
+            special_instructions = $5,
+            updated_at = NOW()
+        WHERE id = $6`,
+		order.CustomerID,
+		order.Status,
+		order.PaymentMethod,
+		order.TotalPrice,
+		order.SpecialInstructions,
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update order: %w", err)
+	}
+
+	// Verify exactly one row was updated
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	// 2. Delete existing order items
+	_, err = tx.ExecContext(ctx, `
+        DELETE FROM order_items 
+        WHERE order_id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("failed to clear order items: %w", err)
+	}
+
+	// 3. Insert new order items
+	for _, item := range order.Items {
+		_, err = tx.ExecContext(ctx, `
+            INSERT INTO order_items (
+                order_id, 
+                menu_item_id, 
+                quantity, 
+                price_at_order, 
+                customizations
+            ) VALUES ($1, $2, $3, $4, $5)`,
+			id,
+			item.MenuItemID,
+			item.Quantity,
+			item.PriceAtOrder,
+			item.Customizations,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert order item: %w", err)
+		}
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
