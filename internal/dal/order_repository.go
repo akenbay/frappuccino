@@ -200,3 +200,46 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, id int, order models.
 
 	return nil
 }
+
+// internal/repository/order_repository.go
+
+func (r *orderRepository) DeleteOrder(ctx context.Context, id int) error {
+	// Begin transaction
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback() // Safe rollback if error occurs
+
+	// 1. First delete all order items (due to ON DELETE RESTRICT in order_items)
+	_, err = tx.ExecContext(ctx, `
+        DELETE FROM order_items 
+        WHERE order_id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete order items: %w", err)
+	}
+
+	// 2. Then delete the order
+	result, err := tx.ExecContext(ctx, `
+        DELETE FROM orders 
+        WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete order: %w", err)
+	}
+
+	// Verify exactly one row was deleted
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	// 3. Commit transaction if everything succeeded
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
