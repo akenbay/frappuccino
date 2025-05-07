@@ -26,8 +26,31 @@ func NewOrderRepository(db *sql.DB) OrderRepository {
 }
 
 func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order) (int, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 1. Check inventory availability first
+	for _, item := range order.Items {
+		var sufficient bool
+		err := tx.QueryRowContext(ctx, `
+            SELECT (i.quantity >= (mi.quantity * $1)) 
+            FROM menu_item_ingredients mi
+            JOIN inventory i ON mi.ingredient_id = i.id
+            WHERE mi.menu_item_id = $2`,
+			item.Quantity, item.MenuItemID,
+		).Scan(&sufficient)
+
+		if err != nil || !sufficient {
+			return 0, fmt.Errorf("insufficient inventory for menu item %d: %w",
+				item.MenuItemID, err)
+		}
+	}
+
 	var id int
-	err := r.db.QueryRowContext(ctx, `
+	err = r.db.QueryRowContext(ctx, `
 		INSERT INTO orders (customer_id, payment_method, total_price, special_instructions) 
 		VALUES ($1, $2, $3, $4)
 		RETURNING id`,
@@ -48,6 +71,50 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order) (
 		if err != nil {
 			return 0, fmt.Errorf("failed to add order item: %w", err)
 		}
+	}
+
+	// 3. Deduct inventory
+	for _, item := range order.Items {
+		_, err = tx.ExecContext(ctx, `
+            WITH ingredients AS (
+                SELECT ingredient_id, quantity 
+                FROM menu_item_ingredients 
+                WHERE menu_item_id = $1
+            )
+            UPDATE inventory i
+            SET quantity = i.quantity - (ing.quantity * $2)
+            FROM ingredients ing
+            WHERE i.id = ing.ingredient_id`,
+			item.MenuItemID, item.Quantity,
+		)
+		if err != nil { /* ... */
+		}
+	}
+
+	// 4. Record inventory transactions
+	for _, item := range order.Items {
+		_, err = tx.ExecContext(ctx, `
+            WITH ingredients AS (
+                SELECT ingredient_id, quantity 
+                FROM menu_item_ingredients 
+                WHERE menu_item_id = $1
+            )
+            INSERT INTO inventory_transactions
+                (ingredient_id, delta, transaction_type, reference_id)
+            SELECT 
+                ingredient_id, 
+                -(quantity * $2), 
+                'order_usage', 
+                $3
+            FROM ingredients`,
+			item.MenuItemID, item.Quantity, id,
+		)
+		if err != nil { /* ... */
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return id, nil
