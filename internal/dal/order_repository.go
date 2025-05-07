@@ -243,3 +243,68 @@ func (r *orderRepository) DeleteOrder(ctx context.Context, id int) error {
 
 	return nil
 }
+
+// internal/repository/order_repository.go
+
+func (r *orderRepository) CloseOrder(ctx context.Context, id int) error {
+	// Begin transaction
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 1. Verify order exists and is in a closable state
+	var currentStatus string
+	err = tx.QueryRowContext(ctx, `
+        SELECT status FROM orders 
+        WHERE id = $1 FOR UPDATE`, id).Scan(&currentStatus)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("order not found: %w", err)
+		}
+		return fmt.Errorf("failed to check order status: %w", err)
+	}
+
+	// Validate order can be closed
+	if currentStatus == "cancelled" {
+		return fmt.Errorf("cannot close already cancelled order")
+	}
+	if currentStatus == "delivered" {
+		return fmt.Errorf("order already closed")
+	}
+
+	// 2. Update order status to "delivered"
+	result, err := tx.ExecContext(ctx, `
+        UPDATE orders 
+        SET status = 'delivered', 
+            updated_at = NOW() 
+        WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("failed to update order status: %w", err)
+	}
+
+	// Verify exactly one row was updated
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	// 3. Record status change in history
+	_, err = tx.ExecContext(ctx, `
+        INSERT INTO order_status_history (order_id, status) 
+        VALUES ($1, 'delivered')`, id)
+	if err != nil {
+		return fmt.Errorf("failed to record status change: %w", err)
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
