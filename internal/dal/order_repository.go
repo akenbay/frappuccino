@@ -49,6 +49,8 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order) (
 		}
 	}
 
+	// 2. Insert order
+
 	var id int
 	err = r.db.QueryRowContext(ctx, `
 		INSERT INTO orders (customer_id, payment_method, total_price, special_instructions) 
@@ -61,7 +63,7 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order) (
 		return 0, fmt.Errorf("failed to create order: %w", err)
 	}
 
-	// Insert order items
+	// 3. Insert order items
 	for _, item := range order.Items {
 		_, err := r.db.ExecContext(ctx, `
 			INSERT INTO order_items (order_id, menu_item_id, quantity, price_at_order, customizations)
@@ -73,7 +75,7 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order) (
 		}
 	}
 
-	// 3. Deduct inventory
+	// 4. Deduct inventory
 	for _, item := range order.Items {
 		_, err = tx.ExecContext(ctx, `
             WITH ingredients AS (
@@ -92,7 +94,7 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order) (
 		}
 	}
 
-	// 4. Record inventory transactions
+	// 5. Record inventory transactions
 	for _, item := range order.Items {
 		_, err = tx.ExecContext(ctx, `
             WITH ingredients AS (
