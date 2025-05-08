@@ -87,7 +87,8 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order) (
             WHERE i.id = ing.ingredient_id`,
 			item.MenuItemID, item.Quantity,
 		)
-		if err != nil { /* ... */
+		if err != nil {
+			return 0, fmt.Errorf("failed to deduct ingredient from inventory: %w", err)
 		}
 	}
 
@@ -109,7 +110,8 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order) (
             FROM ingredients`,
 			item.MenuItemID, item.Quantity, id,
 		)
-		if err != nil { /* ... */
+		if err != nil {
+			return 0, fmt.Errorf("failed to record inventory transaction: %w", err)
 		}
 	}
 
