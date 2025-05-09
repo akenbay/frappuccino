@@ -193,10 +193,10 @@ func (r *orderRepository) DeleteIngredient(ctx context.Context, id int) error {
 func (r *inventoryRepository) GetLeftOversWithPagination(ctx context.Context, sortBy string, page int, pageSize int) (*models.PaginatedInventoryResponse, error) {
 	// Validate and set default values
 	if pageSize <= 0 {
-		pageSize = 10
+		return nil, fmt.Errorf("invalid page size")
 	}
 	if page <= 0 {
-		page = 1
+		return nil, fmt.Errorf("invalid page")
 	}
 	offset := (page - 1) * pageSize
 
@@ -211,9 +211,10 @@ func (r *inventoryRepository) GetLeftOversWithPagination(ctx context.Context, so
 		orderBy = "name ASC"
 	}
 
-	// Get total count
+	// Get total count of items with positive quantity
 	var totalCount int
-	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM inventory").Scan(&totalCount)
+	err := r.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM inventory WHERE quantity > 0").Scan(&totalCount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get total count: %w", err)
 	}
@@ -221,7 +222,7 @@ func (r *inventoryRepository) GetLeftOversWithPagination(ctx context.Context, so
 	// Calculate total pages
 	totalPages := (totalCount + pageSize - 1) / pageSize
 
-	// Execute the paginated query
+	// Execute the paginated query with positive quantity filter
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
 		SELECT 
 			id,
@@ -230,6 +231,7 @@ func (r *inventoryRepository) GetLeftOversWithPagination(ctx context.Context, so
 			unit,
 			cost_per_unit
 		FROM inventory
+		WHERE quantity > 0
 		ORDER BY %s
 		LIMIT $1 OFFSET $2`, orderBy),
 		pageSize, offset)
@@ -249,6 +251,10 @@ func (r *inventoryRepository) GetLeftOversWithPagination(ctx context.Context, so
 			&item.CostPerUnit,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan inventory item: %w", err)
+		}
+		// Additional validation (though SQL query already filters)
+		if item.Quantity <= 0 {
+			continue // Shouldn't happen due to WHERE clause, but defensive programming
 		}
 		items = append(items, item)
 	}
