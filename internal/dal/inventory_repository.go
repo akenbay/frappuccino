@@ -15,7 +15,7 @@ type InventoryRepository interface {
 	GetIngredientByID(ctx context.Context, id int) (models.Inventory, error)
 	UpdateIngredient(ctx context.Context, id int, ingredient models.Inventory) error
 	DeleteIngredient(ctx context.Context, id int) error
-	GetLeftOversWithPagination(sortBy string, page int, pageSize int) ([]models.InventoryItem, error)
+	GetLeftOversWithPagination(sortBy string, page int, pageSize int) (models.PaginatedInventoryResponse, error)
 }
 
 type inventoryRepository struct {
@@ -190,13 +190,13 @@ func (r *orderRepository) DeleteIngredient(ctx context.Context, id int) error {
 	return nil
 }
 
-func (r *inventoryRepository) GetLeftOversWithPagination(ctx context.Context, sortBy string, page int, pageSize int) (*models.PaginatedInventoryResponse, error) {
+func (r *inventoryRepository) GetLeftOversWithPagination(ctx context.Context, sortBy string, page int, pageSize int) (models.PaginatedInventoryResponse, error) {
 	// Validate and set default values
 	if pageSize <= 0 {
-		return nil, fmt.Errorf("invalid page size")
+		return models.PaginatedInventoryResponse{}, fmt.Errorf("invalid page size")
 	}
 	if page <= 0 {
-		return nil, fmt.Errorf("invalid page")
+		return models.PaginatedInventoryResponse{}, fmt.Errorf("invalid page")
 	}
 	offset := (page - 1) * pageSize
 
@@ -216,7 +216,7 @@ func (r *inventoryRepository) GetLeftOversWithPagination(ctx context.Context, so
 	err := r.db.QueryRowContext(ctx,
 		"SELECT COUNT(*) FROM inventory WHERE quantity > 0").Scan(&totalCount)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get total count: %w", err)
+		return models.PaginatedInventoryResponse{}, fmt.Errorf("failed to get total count: %w", err)
 	}
 
 	// Calculate total pages
@@ -236,7 +236,7 @@ func (r *inventoryRepository) GetLeftOversWithPagination(ctx context.Context, so
 		LIMIT $1 OFFSET $2`, orderBy),
 		pageSize, offset)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query leftovers: %w", err)
+		return models.PaginatedInventoryResponse{}, fmt.Errorf("failed to query leftovers: %w", err)
 	}
 	defer rows.Close()
 
@@ -250,7 +250,7 @@ func (r *inventoryRepository) GetLeftOversWithPagination(ctx context.Context, so
 			&item.Unit,
 			&item.CostPerUnit,
 		); err != nil {
-			return nil, fmt.Errorf("failed to scan inventory item: %w", err)
+			return models.PaginatedInventoryResponse{}, fmt.Errorf("failed to scan inventory item: %w", err)
 		}
 		// Additional validation (though SQL query already filters)
 		if item.Quantity <= 0 {
@@ -260,10 +260,10 @@ func (r *inventoryRepository) GetLeftOversWithPagination(ctx context.Context, so
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error during rows iteration: %w", err)
+		return models.PaginatedInventoryResponse{}, fmt.Errorf("error during rows iteration: %w", err)
 	}
 
-	return &models.PaginatedInventoryResponse{
+	return models.PaginatedInventoryResponse{
 		Items:       items,
 		TotalCount:  totalCount,
 		CurrentPage: page,
