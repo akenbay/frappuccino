@@ -12,8 +12,8 @@ import (
 type InventoryRepository interface {
 	CreateIngredient(ctx context.Context, ingredient models.Inventory) (int, error)
 	GetAllIngredients(ctx context.Context, id int) error
-	GetIngredientByID(ctx context.Context, id int) (models.Order, error)
-	UpdateIngredient(ctx context.Context, id int, ingredient models.Order) error
+	GetIngredientByID(ctx context.Context, id int) (models.Inventory, error)
+	UpdateIngredient(ctx context.Context, id int, ingredient models.Inventory) error
 	DeleteIngredient(ctx context.Context, id int) error
 }
 
