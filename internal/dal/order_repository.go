@@ -272,8 +272,6 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, id int, order models.
 	return nil
 }
 
-// internal/repository/order_repository.go
-
 func (r *orderRepository) DeleteOrder(ctx context.Context, id int) error {
 	// Begin transaction
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -282,7 +280,88 @@ func (r *orderRepository) DeleteOrder(ctx context.Context, id int) error {
 	}
 	defer tx.Rollback() // Safe rollback if error occurs
 
-	// 1. First delete all order items (due to ON DELETE RESTRICT in order_items)
+	// 1. Get all items first to restore inventory
+	var items []struct {
+		MenuItemID int
+		Quantity   int
+	}
+	rows, err := tx.QueryContext(ctx, `
+        SELECT menu_item_id, quantity 
+        FROM order_items 
+        WHERE order_id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("failed to get all items from deleting order: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var item struct {
+			MenuItemID int
+			Quantity   int
+		}
+		if err := rows.Scan(&item.MenuItemID, &item.Quantity); err != nil {
+			return fmt.Errorf("failed to scan order item: %w", err)
+		}
+		items = append(items, item)
+	}
+
+	// 2. Restore inventory
+	for _, item := range items {
+		_, err = tx.ExecContext(ctx, `
+            WITH ingredients AS (
+                SELECT ingredient_id, quantity 
+                FROM menu_item_ingredients 
+                WHERE menu_item_id = $1
+            )
+            UPDATE inventory i
+            SET quantity = i.quantity + (ing.quantity * $2)
+            FROM ingredients ing
+            WHERE i.id = ing.ingredient_id`,
+			item.MenuItemID, item.Quantity,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to restore inventory: %w", err)
+		}
+	}
+
+	// 3. Record inventory transactions (for restoring stock)
+	for _, item := range items {
+		_, err = tx.ExecContext(ctx, `
+        WITH ingredients AS (
+            SELECT 
+                ingredient_id, 
+                quantity AS required_quantity
+            FROM menu_item_ingredients 
+            WHERE menu_item_id = $1
+        )
+        INSERT INTO inventory_transactions (
+            ingredient_id, 
+            delta, 
+            transaction_type, 
+            reference_id,
+            notes
+        )
+        SELECT 
+            ingredient_id,
+            (required_quantity * $2),  -- Positive delta for restoring stock
+            'order_deletion',          -- Special transaction type
+            $3,                        -- Order ID being deleted
+            CONCAT('Restored from cancelled order #', $3, ' for menu item #', $1)
+        FROM ingredients`,
+			item.MenuItemID,
+			item.Quantity,
+			id,
+		)
+		if err != nil {
+			return fmt.Errorf(
+				"failed to record inventory restoration for menu item %d: %w",
+				item.MenuItemID,
+				err,
+			)
+		}
+	}
+
+	// 4. First delete all order items (due to ON DELETE RESTRICT in order_items)
 	_, err = tx.ExecContext(ctx, `
         DELETE FROM order_items 
         WHERE order_id = $1`, id)
@@ -290,7 +369,7 @@ func (r *orderRepository) DeleteOrder(ctx context.Context, id int) error {
 		return fmt.Errorf("failed to delete order items: %w", err)
 	}
 
-	// 2. Then delete the order
+	// 5. Then delete the order
 	result, err := tx.ExecContext(ctx, `
         DELETE FROM orders 
         WHERE id = $1`, id)
@@ -307,15 +386,13 @@ func (r *orderRepository) DeleteOrder(ctx context.Context, id int) error {
 		return sql.ErrNoRows
 	}
 
-	// 3. Commit transaction if everything succeeded
+	// 6. Commit transaction if everything succeeded
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return nil
 }
-
-// internal/repository/order_repository.go
 
 func (r *orderRepository) CloseOrder(ctx context.Context, id int) error {
 	// Begin transaction

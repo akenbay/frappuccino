@@ -26,6 +26,12 @@ CREATE TYPE payment_method AS ENUM (
     'mobile_payment'
 );
 
+CREATE TYPE transaction_type AS ENUM (
+    'order_usage',
+    'order_deletion',
+    'adjustment'
+);
+
 -- ========================
 -- 2. Create Core Tables
 -- ========================
@@ -112,7 +118,7 @@ CREATE TABLE inventory_transactions (
     id SERIAL PRIMARY KEY,
     ingredient_id INTEGER REFERENCES inventory(id) ON DELETE CASCADE,
     delta DECIMAL(10,3) NOT NULL,
-    transaction_type TEXT NOT NULL CHECK (transaction_type IN ('purchase', 'usage', 'adjustment')),
+    transaction_type transaction_type NOT NULL,
     reference_id INTEGER, -- order_id or other reference
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
