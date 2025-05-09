@@ -15,6 +15,7 @@ type InventoryRepository interface {
 	GetIngredientByID(ctx context.Context, id int) (models.Inventory, error)
 	UpdateIngredient(ctx context.Context, id int, ingredient models.Inventory) error
 	DeleteIngredient(ctx context.Context, id int) error
+	GetLeftOversWithPagination(sortBy string, page int, pageSize int) ([]models.InventoryItem, error)
 }
 
 type inventoryRepository struct {
@@ -187,4 +188,81 @@ func (r *orderRepository) DeleteIngredient(ctx context.Context, id int) error {
 	}
 
 	return nil
+}
+
+func (r *inventoryRepository) GetLeftOversWithPagination(ctx context.Context, sortBy string, page int, pageSize int) (*models.PaginatedInventoryResponse, error) {
+	// Validate and set default values
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+	if page <= 0 {
+		page = 1
+	}
+	offset := (page - 1) * pageSize
+
+	// Determine sort order
+	var orderBy string
+	switch sortBy {
+	case "price":
+		orderBy = "cost_per_unit DESC"
+	case "quantity":
+		orderBy = "quantity ASC"
+	default:
+		orderBy = "name ASC"
+	}
+
+	// Get total count
+	var totalCount int
+	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM inventory").Scan(&totalCount)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get total count: %w", err)
+	}
+
+	// Calculate total pages
+	totalPages := (totalCount + pageSize - 1) / pageSize
+
+	// Execute the paginated query
+	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
+		SELECT 
+			id,
+			name,
+			quantity,
+			unit,
+			cost_per_unit
+		FROM inventory
+		ORDER BY %s
+		LIMIT $1 OFFSET $2`, orderBy),
+		pageSize, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query leftovers: %w", err)
+	}
+	defer rows.Close()
+
+	var items []models.InventoryItem
+	for rows.Next() {
+		var item models.InventoryItem
+		if err := rows.Scan(
+			&item.ID,
+			&item.Name,
+			&item.Quantity,
+			&item.Unit,
+			&item.CostPerUnit,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan inventory item: %w", err)
+		}
+		items = append(items, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error during rows iteration: %w", err)
+	}
+
+	return &models.PaginatedInventoryResponse{
+		Items:       items,
+		TotalCount:  totalCount,
+		CurrentPage: page,
+		PageSize:    pageSize,
+		TotalPages:  totalPages,
+		HasNext:     page < totalPages,
+	}, nil
 }

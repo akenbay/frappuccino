@@ -58,15 +58,6 @@ type SearchCustomer struct {
 	Email string `json:"email,omitempty"`
 }
 
-// InventoryLeftovers - For GET /reports/inventory-leftovers
-type InventoryItem struct {
-	ID          int     `json:"id"`
-	Name        string  `json:"name"`
-	Quantity    float64 `json:"quantity"`
-	Unit        string  `json:"unit"`
-	CostPerUnit float64 `json:"cost_per_unit,omitempty"`
-}
-
 type PaginatedInventory struct {
 	Items       []InventoryItem `json:"data"`
 	TotalItems  int             `json:"total_items"`
@@ -93,13 +84,4 @@ type SalesTrend struct {
 	TotalSales float64   `json:"total_sales"`
 	OrderCount int       `json:"order_count"`
 	AvgOrder   float64   `json:"average_order_value"`
-}
-
-// InventoryAlert - For low stock reports
-type InventoryAlert struct {
-	IngredientID   int     `json:"ingredient_id"`
-	Name           string  `json:"name"`
-	CurrentStock   float64 `json:"current_stock"`
-	ReorderLevel   float64 `json:"reorder_level"`
-	DaysUntilEmpty float64 `json:"days_until_empty,omitempty"`
 }
