@@ -45,22 +45,3 @@ type PaginatedInventoryResponse struct {
 	TotalPages  int             `json:"total_pages"`
 	HasNext     bool            `json:"has_next"`
 }
-
-// InventoryAlert represents items that are below reorder level
-type InventoryAlert struct {
-	ID            int     `json:"id"`
-	Name          string  `json:"name"`
-	CurrentStock  float64 `json:"current_stock"`
-	ReorderLevel  float64 `json:"reorder_level"`
-	DaysRemaining float64 `json:"days_remaining,omitempty"`
-}
-
-// InventoryUpdateRequest represents payload for updating inventory
-type InventoryUpdateRequest struct {
-	Name         *string          `json:"name,omitempty"`
-	Quantity     *float64         `json:"quantity,omitempty"`
-	Unit         *string          `json:"unit,omitempty"`
-	CostPerUnit  *float64         `json:"cost_per_unit,omitempty"`
-	ReOrderLevel *float64         `json:"reorder_level,omitempty"`
-	SupplierInfo *json.RawMessage `json:"supplier_info,omitempty"`
-}
