@@ -25,3 +25,10 @@ type OrderItem struct {
 	Customizations json.RawMessage `json:"customizations,omitempty"`
 	PriceAtOrder   float64         `json:"price_at_order"`
 }
+
+type OrderFilters struct {
+	Status     string    `json:"status"`      // e.g., "pending", "completed"
+	StartDate  time.Time `json:"start_date"`  // Filter orders after this date
+	EndDate    time.Time `json:"end_date"`    // Filter orders before this date
+	CustomerID int       `json:"customer_id"` // Optional: filter by customer
+}

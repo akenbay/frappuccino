@@ -3,8 +3,10 @@ package dal
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"frappuccino/internal/models"
 )
@@ -12,6 +14,7 @@ import (
 type OrderRepository interface {
 	CreateOrder(ctx context.Context, order models.Order) (int, error)
 	GetOrderByID(ctx context.Context, id int) (models.Order, error)
+	GetAllOrders(ctx context.Context, filters models.OrderFilters) ([]models.Order, error)
 	UpdateOrder(ctx context.Context, id int, order models.Order) error
 	DeleteOrder(ctx context.Context, id int) error
 	CloseOrder(ctx context.Context, id int) error
@@ -26,21 +29,46 @@ func NewOrderRepository(db *sql.DB) OrderRepository {
 }
 
 func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order) (int, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 1. Check inventory availability first
+	for _, item := range order.Items {
+		var sufficient bool
+		err := tx.QueryRowContext(ctx, `
+            SELECT (i.quantity >= (mi.quantity * $1)) 
+            FROM menu_item_ingredients mi
+            JOIN inventory i ON mi.ingredient_id = i.id
+            WHERE mi.menu_item_id = $2`,
+			item.Quantity, item.MenuItemID,
+		).Scan(&sufficient)
+
+		if err != nil || !sufficient {
+			return 0, fmt.Errorf("insufficient inventory for menu item %d: %w",
+				item.MenuItemID, err)
+		}
+	}
+
+	// 2. Insert order
+
 	var id int
-	err := r.db.QueryRowContext(ctx, `
-		INSERT INTO orders (customer_id, payment_method, status, total_price, special_instructions) 
-		VALUES ($1, $2, $3, $4, $5)
+	err = tx.QueryRowContext(ctx, `
+		INSERT INTO orders (customer_id, payment_method, total_price, special_instructions) 
+		VALUES ($1, $2, $3, $4)
 		RETURNING id`,
-		order.CustomerID, order.PaymentMethod, order.Status, order.TotalPrice, order.SpecialInstructions,
+		order.CustomerID, order.PaymentMethod, order.TotalPrice, order.SpecialInstructions,
 	).Scan(&id)
 
 	if err != nil {
 		return 0, fmt.Errorf("failed to create order: %w", err)
 	}
 
-	// Insert order items
+	// 3. Insert order items
 	for _, item := range order.Items {
-		_, err := r.db.ExecContext(ctx, `
+		_, err := tx.ExecContext(ctx, `
 			INSERT INTO order_items (order_id, menu_item_id, quantity, price_at_order, customizations)
 			VALUES ($1, $2, $3, $4, $5)`,
 			id, item.MenuItemID, item.Quantity, item.PriceAtOrder, item.Customizations,
@@ -48,6 +76,52 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order) (
 		if err != nil {
 			return 0, fmt.Errorf("failed to add order item: %w", err)
 		}
+	}
+
+	// 4. Deduct inventory
+	for _, item := range order.Items {
+		_, err = tx.ExecContext(ctx, `
+            WITH ingredients AS (
+                SELECT ingredient_id, quantity 
+                FROM menu_item_ingredients 
+                WHERE menu_item_id = $1
+            )
+            UPDATE inventory i
+            SET quantity = i.quantity - (ing.quantity * $2)
+            FROM ingredients ing
+            WHERE i.id = ing.ingredient_id`,
+			item.MenuItemID, item.Quantity,
+		)
+		if err != nil {
+			return 0, fmt.Errorf("failed to deduct ingredient from inventory: %w", err)
+		}
+	}
+
+	// 5. Record inventory transactions
+	for _, item := range order.Items {
+		_, err = tx.ExecContext(ctx, `
+            WITH ingredients AS (
+                SELECT ingredient_id, quantity 
+                FROM menu_item_ingredients 
+                WHERE menu_item_id = $1
+            )
+            INSERT INTO inventory_transactions
+                (ingredient_id, delta, transaction_type, reference_id)
+            SELECT 
+                ingredient_id, 
+                -(quantity * $2), 
+                'order_usage', 
+                $3
+            FROM ingredients`,
+			item.MenuItemID, item.Quantity, id,
+		)
+		if err != nil {
+			return 0, fmt.Errorf("failed to record inventory transaction: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return id, nil
@@ -125,7 +199,7 @@ func (r *orderRepository) GetOrderByID(ctx context.Context, id int) (models.Orde
 	return order, nil
 }
 
-func (r *orderRepository) UpdateOrder(ctx context.Context, id int, order models.Order) error {
+func (r *orderRepository) UpdateOrder(ctx context.Context, id int, updatedOrder models.Order) error {
 	// Begin transaction
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -133,7 +207,115 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, id int, order models.
 	}
 	defer tx.Rollback()
 
-	// 1. Update order metadata
+	// 1. Get current order items (to calculate inventory delta)
+	var currentItems []struct {
+		MenuItemID int
+		Quantity   int
+	}
+	rows, err := tx.QueryContext(ctx, `
+        SELECT menu_item_id, quantity 
+        FROM order_items 
+        WHERE order_id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("failed to get current items: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var item struct{ MenuItemID, Quantity int }
+		if err := rows.Scan(&item.MenuItemID, &item.Quantity); err != nil {
+			return fmt.Errorf("failed to scan current item: %w", err)
+		}
+		currentItems = append(currentItems, item)
+	}
+
+	// 2. Calculate net inventory changes
+	inventoryDeltas := make(map[int]int) // ingredient_id → delta
+	for _, currItem := range currentItems {
+		// Subtract old quantities
+		ingredientRows, err := tx.QueryContext(ctx, `
+            SELECT ingredient_id, quantity 
+            FROM menu_item_ingredients 
+            WHERE menu_item_id = $1`, currItem.MenuItemID)
+		if err != nil {
+			return fmt.Errorf("failed to get ingredients for menu item %d: %w", currItem.MenuItemID, err)
+		}
+
+		for ingredientRows.Next() {
+			var ingredientID int
+			var quantityPerUnit float64
+			if err := ingredientRows.Scan(&ingredientID, &quantityPerUnit); err != nil {
+				return fmt.Errorf("failed to scan ingredient: %w", err)
+			}
+			inventoryDeltas[ingredientID] -= int(quantityPerUnit * float64(currItem.Quantity))
+		}
+		ingredientRows.Close()
+	}
+
+	for _, newItem := range updatedOrder.Items {
+		// Add new quantities
+		ingredientRows, err := tx.QueryContext(ctx, `
+            SELECT ingredient_id, quantity 
+            FROM menu_item_ingredients 
+            WHERE menu_item_id = $1`, newItem.MenuItemID)
+		if err != nil {
+			return fmt.Errorf("failed to get ingredients for menu item %d: %w", newItem.MenuItemID, err)
+		}
+
+		for ingredientRows.Next() {
+			var ingredientID int
+			var quantityPerUnit float64
+			if err := ingredientRows.Scan(&ingredientID, &quantityPerUnit); err != nil {
+				return fmt.Errorf("failed to scan ingredient: %w", err)
+			}
+			inventoryDeltas[ingredientID] += int(quantityPerUnit * float64(newItem.Quantity))
+		}
+		ingredientRows.Close()
+	}
+
+	// 3. Verify inventory availability (for positive deltas)
+	for ingredientID, delta := range inventoryDeltas {
+		if delta > 0 { // Only check for new usage (not restocks)
+			var currentStock int
+			err := tx.QueryRowContext(ctx, `
+                SELECT quantity FROM inventory 
+                WHERE id = $1 FOR UPDATE`, ingredientID).Scan(&currentStock)
+			if err != nil {
+				return fmt.Errorf("failed to check inventory for ingredient %d: %w", ingredientID, err)
+			}
+
+			if currentStock < delta {
+				return fmt.Errorf("insufficient stock for ingredient %d (need %d, have %d)",
+					ingredientID, delta, currentStock)
+			}
+		}
+	}
+
+	// 4. Update inventory
+	for ingredientID, delta := range inventoryDeltas {
+		if delta != 0 { // Skip if no net change
+			_, err := tx.ExecContext(ctx, `
+                UPDATE inventory 
+                SET quantity = quantity + $1 
+                WHERE id = $2`, -delta, ingredientID)
+			if err != nil {
+				return fmt.Errorf("failed to update inventory for ingredient %d: %w", ingredientID, err)
+			}
+
+			// Record transaction
+			_, err = tx.ExecContext(ctx, `
+                INSERT INTO inventory_transactions (
+                    ingredient_id, delta, transaction_type, reference_id
+                ) VALUES (
+                    $1, $2, 'order_update', $3
+                )`, ingredientID, -delta, id)
+			if err != nil {
+				return fmt.Errorf("failed to record inventory transaction: %w", err)
+			}
+		}
+	}
+
+	// 5. Update order metadata
 	result, err := tx.ExecContext(ctx, `
         UPDATE orders 
         SET 
@@ -144,11 +326,11 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, id int, order models.
             special_instructions = $5,
             updated_at = NOW()
         WHERE id = $6`,
-		order.CustomerID,
-		order.Status,
-		order.PaymentMethod,
-		order.TotalPrice,
-		order.SpecialInstructions,
+		updatedOrder.CustomerID,
+		updatedOrder.Status,
+		updatedOrder.PaymentMethod,
+		updatedOrder.TotalPrice,
+		updatedOrder.SpecialInstructions,
 		id,
 	)
 	if err != nil {
@@ -164,7 +346,7 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, id int, order models.
 		return sql.ErrNoRows
 	}
 
-	// 2. Delete existing order items
+	// 6. Delete existing order items
 	_, err = tx.ExecContext(ctx, `
         DELETE FROM order_items 
         WHERE order_id = $1`, id)
@@ -172,8 +354,8 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, id int, order models.
 		return fmt.Errorf("failed to clear order items: %w", err)
 	}
 
-	// 3. Insert new order items
-	for _, item := range order.Items {
+	// 7. Insert new order items
+	for _, item := range updatedOrder.Items {
 		_, err = tx.ExecContext(ctx, `
             INSERT INTO order_items (
                 order_id, 
@@ -201,8 +383,6 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, id int, order models.
 	return nil
 }
 
-// internal/repository/order_repository.go
-
 func (r *orderRepository) DeleteOrder(ctx context.Context, id int) error {
 	// Begin transaction
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -211,7 +391,88 @@ func (r *orderRepository) DeleteOrder(ctx context.Context, id int) error {
 	}
 	defer tx.Rollback() // Safe rollback if error occurs
 
-	// 1. First delete all order items (due to ON DELETE RESTRICT in order_items)
+	// 1. Get all items first to restore inventory
+	var items []struct {
+		MenuItemID int
+		Quantity   int
+	}
+	rows, err := tx.QueryContext(ctx, `
+        SELECT menu_item_id, quantity 
+        FROM order_items 
+        WHERE order_id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("failed to get all items from deleting order: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var item struct {
+			MenuItemID int
+			Quantity   int
+		}
+		if err := rows.Scan(&item.MenuItemID, &item.Quantity); err != nil {
+			return fmt.Errorf("failed to scan order item: %w", err)
+		}
+		items = append(items, item)
+	}
+
+	// 2. Restore inventory
+	for _, item := range items {
+		_, err = tx.ExecContext(ctx, `
+            WITH ingredients AS (
+                SELECT ingredient_id, quantity 
+                FROM menu_item_ingredients 
+                WHERE menu_item_id = $1
+            )
+            UPDATE inventory i
+            SET quantity = i.quantity + (ing.quantity * $2)
+            FROM ingredients ing
+            WHERE i.id = ing.ingredient_id`,
+			item.MenuItemID, item.Quantity,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to restore inventory: %w", err)
+		}
+	}
+
+	// 3. Record inventory transactions (for restoring stock)
+	for _, item := range items {
+		_, err = tx.ExecContext(ctx, `
+        WITH ingredients AS (
+            SELECT 
+                ingredient_id, 
+                quantity AS required_quantity
+            FROM menu_item_ingredients 
+            WHERE menu_item_id = $1
+        )
+        INSERT INTO inventory_transactions (
+            ingredient_id, 
+            delta, 
+            transaction_type, 
+            reference_id,
+            notes
+        )
+        SELECT 
+            ingredient_id,
+            (required_quantity * $2),  -- Positive delta for restoring stock
+            'order_deletion',          -- Special transaction type
+            $3,                        -- Order ID being deleted
+            CONCAT('Restored from cancelled order #', $3, ' for menu item #', $1)
+        FROM ingredients`,
+			item.MenuItemID,
+			item.Quantity,
+			id,
+		)
+		if err != nil {
+			return fmt.Errorf(
+				"failed to record inventory restoration for menu item %d: %w",
+				item.MenuItemID,
+				err,
+			)
+		}
+	}
+
+	// 4. First delete all order items (due to ON DELETE RESTRICT in order_items)
 	_, err = tx.ExecContext(ctx, `
         DELETE FROM order_items 
         WHERE order_id = $1`, id)
@@ -219,7 +480,7 @@ func (r *orderRepository) DeleteOrder(ctx context.Context, id int) error {
 		return fmt.Errorf("failed to delete order items: %w", err)
 	}
 
-	// 2. Then delete the order
+	// 5. Then delete the order
 	result, err := tx.ExecContext(ctx, `
         DELETE FROM orders 
         WHERE id = $1`, id)
@@ -236,10 +497,173 @@ func (r *orderRepository) DeleteOrder(ctx context.Context, id int) error {
 		return sql.ErrNoRows
 	}
 
-	// 3. Commit transaction if everything succeeded
+	// 6. Commit transaction if everything succeeded
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return nil
+}
+
+func (r *orderRepository) CloseOrder(ctx context.Context, id int) error {
+	// Begin transaction
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 1. Verify order exists and is in a closable state
+	var currentStatus string
+	err = tx.QueryRowContext(ctx, `
+        SELECT status FROM orders 
+        WHERE id = $1 FOR UPDATE`, id).Scan(&currentStatus)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("order not found: %w", err)
+		}
+		return fmt.Errorf("failed to check order status: %w", err)
+	}
+
+	// Validate order can be closed
+	if currentStatus == "cancelled" {
+		return fmt.Errorf("cannot close already cancelled order")
+	}
+	if currentStatus == "delivered" {
+		return fmt.Errorf("order already closed")
+	}
+
+	// 2. Update order status to "delivered"
+	result, err := tx.ExecContext(ctx, `
+        UPDATE orders 
+        SET status = 'delivered', 
+            updated_at = NOW() 
+        WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("failed to update order status: %w", err)
+	}
+
+	// Verify exactly one row was updated
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	// 3. Record status change in history
+	_, err = tx.ExecContext(ctx, `
+        INSERT INTO order_status_history (order_id, status) 
+        VALUES ($1, 'delivered')`, id)
+	if err != nil {
+		return fmt.Errorf("failed to record status change: %w", err)
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+func (r *orderRepository) GetAllOrders(ctx context.Context, filters models.OrderFilters) ([]models.Order, error) {
+	// Build base query
+	query := `
+        SELECT 
+            o.id,
+            o.customer_id,
+            o.status,
+            o.payment_method,
+            o.total_price,
+            o.special_instructions,
+            o.created_at,
+            o.updated_at,
+            COALESCE(
+                json_agg(
+                    json_build_object(
+                        'id', oi.id,
+                        'menu_item_id', oi.menu_item_id,
+                        'quantity', oi.quantity,
+                        'price_at_order', oi.price_at_order,
+                        'customizations', oi.customizations
+                    )
+                ) FILTER (WHERE oi.id IS NOT NULL),
+                '[]'
+            ) AS items
+        FROM orders o
+        LEFT JOIN order_items oi ON o.id = oi.order_id
+    `
+
+	// Add filters (status, date range, etc.)
+	var args []interface{}
+	whereClauses := []string{}
+
+	if filters.Status != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("o.status = $%d", len(args)+1))
+		args = append(args, filters.Status)
+	}
+
+	if !filters.StartDate.IsZero() {
+		whereClauses = append(whereClauses, fmt.Sprintf("o.created_at >= $%d", len(args)+1))
+		args = append(args, filters.StartDate)
+	}
+
+	if !filters.EndDate.IsZero() {
+		whereClauses = append(whereClauses, fmt.Sprintf("o.created_at <= $%d", len(args)+1))
+		args = append(args, filters.EndDate)
+	}
+
+	// Combine WHERE clauses
+	if len(whereClauses) > 0 {
+		query += " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	// Group and order
+	query += `
+        GROUP BY o.id
+        ORDER BY o.created_at DESC
+    `
+
+	// Execute query
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query orders: %w", err)
+	}
+	defer rows.Close()
+
+	var orders []models.Order
+	for rows.Next() {
+		var order models.Order
+		var itemsJSON []byte
+
+		err := rows.Scan(
+			&order.ID,
+			&order.CustomerID,
+			&order.Status,
+			&order.PaymentMethod,
+			&order.TotalPrice,
+			&order.SpecialInstructions,
+			&order.CreatedAt,
+			&order.UpdatedAt,
+			&itemsJSON,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan order: %w", err)
+		}
+
+		// Unmarshal JSON items
+		if err := json.Unmarshal(itemsJSON, &order.Items); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal order items: %w", err)
+		}
+
+		orders = append(orders, order)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error after scanning orders: %w", err)
+	}
+
+	return orders, nil
 }
