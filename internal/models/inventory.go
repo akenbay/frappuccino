@@ -45,3 +45,10 @@ type PaginatedInventoryResponse struct {
 	TotalPages  int             `json:"total_pages"`
 	HasNext     bool            `json:"has_next"`
 }
+
+type InventoryUsage struct {
+	IngredientID   int     `json:"ingredient_id"`
+	Name           string  `json:"name"`
+	QuantityUsed   float64 `json:"quantity_used"`
+	RemainingStock float64 `json:"remaining_stock"`
+}

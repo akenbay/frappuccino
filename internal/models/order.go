@@ -32,3 +32,30 @@ type OrderFilters struct {
 	EndDate    time.Time `json:"end_date"`    // Filter orders before this date
 	CustomerID int       `json:"customer_id"` // Optional: filter by customer
 }
+
+type BatchOrderRequest struct {
+	Orders []Order `json:"orders"`
+}
+
+// BatchOrderResponse represents the result of batch processing
+type BatchOrderResponse struct {
+	ProcessedOrders []ProcessedOrder `json:"processed_orders"`
+	Summary         BatchSummary     `json:"summary"`
+}
+
+type ProcessedOrder struct {
+	OrderID      int     `json:"order_id"`
+	CustomerName string  `json:"customer_name"`
+	Status       string  `json:"status"`
+	Total        float64 `json:"total"`
+	Rejected     bool    `json:"rejected,omitempty"`
+	RejectReason string  `json:"reject_reason,omitempty"`
+}
+
+type BatchSummary struct {
+	TotalOrders   int              `json:"total_orders"`
+	Accepted      int              `json:"accepted"`
+	Rejected      int              `json:"rejected"`
+	TotalRevenue  float64          `json:"total_revenue"`
+	InventoryUsed []InventoryUsage `json:"inventory_used"`
+}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"frappuccino/internal/models"
 )
@@ -18,6 +19,8 @@ type OrderRepository interface {
 	UpdateOrder(ctx context.Context, id int, order models.Order) error
 	DeleteOrder(ctx context.Context, id int) error
 	CloseOrder(ctx context.Context, id int) error
+	GetNumberOfOrderedItems(ctx context.Context, startDate, endDate time.Time) (map[string]int, error)
+	BatchProcessOrders(ctx context.Context, orders []models.Order) (models.BatchOrderResponse, error)
 }
 
 type orderRepository struct {
@@ -666,4 +669,150 @@ func (r *orderRepository) GetAllOrders(ctx context.Context, filters models.Order
 	}
 
 	return orders, nil
+}
+
+func (r *orderRepository) GetNumberOfOrderedItems(ctx context.Context, startDate, endDate time.Time) (map[string]int, error) {
+	query := `
+		SELECT mi.name, SUM(oi.quantity) as total_quantity
+		FROM order_items oi
+		JOIN menu_items mi ON oi.menu_item_id = mi.id
+		JOIN orders o ON oi.order_id = o.id
+		WHERE o.created_at BETWEEN $1 AND $2
+		GROUP BY mi.name
+		ORDER BY total_quantity DESC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, startDate, endDate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query ordered items: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string]int)
+	for rows.Next() {
+		var name string
+		var quantity int
+		if err := rows.Scan(&name, &quantity); err != nil {
+			return nil, fmt.Errorf("failed to scan ordered item: %w", err)
+		}
+		result[name] = quantity
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows error: %w", err)
+	}
+
+	return result, nil
+}
+
+func (r *orderRepository) BatchProcessOrders(ctx context.Context, orders []models.Order) (models.BatchOrderResponse, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return models.BatchOrderResponse{}, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	response := models.BatchOrderResponse{
+		ProcessedOrders: make([]models.ProcessedOrder, 0, len(orders)),
+		Summary: models.BatchSummary{
+			InventoryUsed: make([]models.InventoryUsage, 0),
+		},
+	}
+
+	inventoryUpdates := make(map[int]float64) // ingredientID -> quantity used
+
+	for _, order := range orders {
+		processed := models.ProcessedOrder{
+			CustomerName: fmt.Sprintf("Customer %d", order.CustomerID),
+			Total:        order.TotalPrice,
+		}
+
+		// Check inventory availability first
+		canFulfill, rejectReason := r.checkInventory(ctx, tx, order.Items, inventoryUpdates)
+		if !canFulfill {
+			processed.Status = "rejected"
+			processed.Rejected = true
+			processed.RejectReason = rejectReason
+			response.Summary.Rejected++
+			response.ProcessedOrders = append(response.ProcessedOrders, processed)
+			continue
+		}
+
+		// Process the order
+		orderID, err := r.CreateOrder(ctx, order)
+		if err != nil {
+			return models.BatchOrderResponse{}, fmt.Errorf("failed to create order: %w", err)
+		}
+
+		processed.OrderID = orderID
+		processed.Status = "accepted"
+		response.Summary.Accepted++
+		response.ProcessedOrders = append(response.ProcessedOrders, processed)
+		response.Summary.TotalRevenue += order.TotalPrice
+	}
+
+	// Prepare inventory usage report
+	for id, qty := range inventoryUpdates {
+		var name string
+		var remaining float64
+		err := tx.QueryRowContext(ctx, `
+			SELECT name, quantity FROM inventory WHERE id = $1`, id).Scan(&name, &remaining)
+		if err != nil {
+			return models.BatchOrderResponse{}, fmt.Errorf("failed to get inventory info: %w", err)
+		}
+
+		response.Summary.InventoryUsed = append(response.Summary.InventoryUsed, models.InventoryUsage{
+			IngredientID:   id,
+			Name:           name,
+			QuantityUsed:   qty,
+			RemainingStock: remaining,
+		})
+	}
+
+	response.Summary.TotalOrders = len(orders)
+
+	if err := tx.Commit(); err != nil {
+		return models.BatchOrderResponse{}, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return response, nil
+}
+
+// Helper functions
+func (r *orderRepository) checkInventory(ctx context.Context, tx *sql.Tx, items []models.OrderItem, inventoryUpdates map[int]float64) (bool, string) {
+	for _, item := range items {
+		// Get required ingredients for this menu item
+		rows, err := tx.QueryContext(ctx, `
+			SELECT ingredient_id, quantity 
+			FROM menu_item_ingredients 
+			WHERE menu_item_id = $1`, item.MenuItemID)
+		if err != nil {
+			return false, "inventory check failed"
+		}
+
+		for rows.Next() {
+			var ingredientID int
+			var requiredQty float64
+			if err := rows.Scan(&ingredientID, &requiredQty); err != nil {
+				return false, "inventory check failed"
+			}
+
+			totalNeeded := requiredQty * float64(item.Quantity)
+			var currentStock float64
+			err := tx.QueryRowContext(ctx, `
+				SELECT quantity FROM inventory WHERE id = $1`, ingredientID).Scan(&currentStock)
+			if err != nil {
+				return false, "ingredient not found"
+			}
+
+			// Account for previously used inventory in this batch
+			alreadyUsed := inventoryUpdates[ingredientID]
+			if currentStock-alreadyUsed < totalNeeded {
+				return false, fmt.Sprintf("insufficient stock for ingredient %d", ingredientID)
+			}
+
+			inventoryUpdates[ingredientID] = alreadyUsed + totalNeeded
+		}
+	}
+	return true, ""
 }
