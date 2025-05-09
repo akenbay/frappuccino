@@ -10,7 +10,7 @@ import (
 )
 
 type InventoryRepository interface {
-	AddIngredient(ctx context.Context, ingredient models.Inventory) (int, error)
+	CreateIngredient(ctx context.Context, ingredient models.Inventory) (int, error)
 	GetAllIngredients(ctx context.Context, id int) error
 	GetIngredientByID(ctx context.Context, id int) (models.Order, error)
 	UpdateIngredient(ctx context.Context, id int, order models.Order) error
@@ -25,7 +25,7 @@ func NewInventoryRepository(db *sql.DB) *inventoryRepository {
 	return &inventoryRepository{NewRepository(db)}
 }
 
-func (r *inventoryRepository) AddIngredient(ctx context.Context, ingredient models.Inventory) (int, error) {
+func (r *inventoryRepository) CreateIngredient(ctx context.Context, ingredient models.Inventory) (int, error) {
 	var id int
 	err := r.db.QueryRowContext(ctx, `
 		INSERT INTO  (name, quantity, unit, cost_per_unit, reorder_level, supplier_info) 
