@@ -13,7 +13,7 @@ type InventoryRepository interface {
 	CreateIngredient(ctx context.Context, ingredient models.Inventory) (int, error)
 	GetAllIngredients(ctx context.Context, id int) error
 	GetIngredientByID(ctx context.Context, id int) (models.Order, error)
-	UpdateIngredient(ctx context.Context, id int, order models.Order) error
+	UpdateIngredient(ctx context.Context, id int, ingredient models.Order) error
 	DeleteIngredient(ctx context.Context, id int) error
 }
 
@@ -25,7 +25,7 @@ func NewInventoryRepository(db *sql.DB) *inventoryRepository {
 	return &inventoryRepository{NewRepository(db)}
 }
 
-func (r *inventoryRepository) CreateIngredient(ctx context.Context, ingredient models.Inventory) (int, error) {
+func (r *inventoryRepository) AddIngredient(ctx context.Context, ingredient models.Inventory) (int, error) {
 	var id int
 	err := r.db.QueryRowContext(ctx, `
 		INSERT INTO  (name, quantity, unit, cost_per_unit, reorder_level, supplier_info) 
@@ -105,4 +105,86 @@ func (r *inventoryRepository) GetIngredientByID(ctx context.Context, id int) (mo
 	}
 
 	return ingredient, nil
+}
+
+func (r *orderRepository) UpdateIngredient(ctx context.Context, id int, ingredient models.Inventory) error {
+	// Begin transaction
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Update ingredient metadata
+	result, err := tx.ExecContext(ctx, `
+        UPDATE inventory 
+        SET 
+            name = $1,
+            quantity = $2,
+            unit = $3,
+            cost_per_unit = $4,
+            reorder_level = $5,
+			supplier_info = $6,
+            updated_at = NOW()
+        WHERE id = $7`,
+		ingredient.Name,
+		ingredient.Quantity,
+		ingredient.Unit,
+		ingredient.CostPerUnit,
+		ingredient.ReOrderLevel,
+		ingredient.SupplierInfo,
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update ingredient: %w", err)
+	}
+
+	// Verify exactly one row was updated
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+func (r *orderRepository) DeleteIngredient(ctx context.Context, id int) error {
+	// Begin transaction
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback() // Safe rollback if error occurs
+
+	// Delete the ingredient
+	result, err := tx.ExecContext(ctx, `
+        DELETE FROM inventory 
+        WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete ingredient: %w", err)
+	}
+
+	// Verify exactly one row was deleted
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	// Commit transaction if everything succeeded
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }
