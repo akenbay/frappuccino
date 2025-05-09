@@ -3,8 +3,10 @@ package dal
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"frappuccino/internal/models"
 )
@@ -12,6 +14,7 @@ import (
 type OrderRepository interface {
 	CreateOrder(ctx context.Context, order models.Order) (int, error)
 	GetOrderByID(ctx context.Context, id int) (models.Order, error)
+	GetAllOrders(ctx context.Context, filters models.OrderFilters) ([]models.Order, error)
 	UpdateOrder(ctx context.Context, id int, order models.Order) error
 	DeleteOrder(ctx context.Context, id int) error
 	CloseOrder(ctx context.Context, id int) error
@@ -563,4 +566,104 @@ func (r *orderRepository) CloseOrder(ctx context.Context, id int) error {
 	}
 
 	return nil
+}
+
+func (r *orderRepository) GetAllOrders(ctx context.Context, filters models.OrderFilters) ([]models.Order, error) {
+	// Build base query
+	query := `
+        SELECT 
+            o.id,
+            o.customer_id,
+            o.status,
+            o.payment_method,
+            o.total_price,
+            o.special_instructions,
+            o.created_at,
+            o.updated_at,
+            COALESCE(
+                json_agg(
+                    json_build_object(
+                        'id', oi.id,
+                        'menu_item_id', oi.menu_item_id,
+                        'quantity', oi.quantity,
+                        'price_at_order', oi.price_at_order,
+                        'customizations', oi.customizations
+                    )
+                ) FILTER (WHERE oi.id IS NOT NULL),
+                '[]'
+            ) AS items
+        FROM orders o
+        LEFT JOIN order_items oi ON o.id = oi.order_id
+    `
+
+	// Add filters (status, date range, etc.)
+	var args []interface{}
+	whereClauses := []string{}
+
+	if filters.Status != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("o.status = $%d", len(args)+1))
+		args = append(args, filters.Status)
+	}
+
+	if !filters.StartDate.IsZero() {
+		whereClauses = append(whereClauses, fmt.Sprintf("o.created_at >= $%d", len(args)+1))
+		args = append(args, filters.StartDate)
+	}
+
+	if !filters.EndDate.IsZero() {
+		whereClauses = append(whereClauses, fmt.Sprintf("o.created_at <= $%d", len(args)+1))
+		args = append(args, filters.EndDate)
+	}
+
+	// Combine WHERE clauses
+	if len(whereClauses) > 0 {
+		query += " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	// Group and order
+	query += `
+        GROUP BY o.id
+        ORDER BY o.created_at DESC
+    `
+
+	// Execute query
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query orders: %w", err)
+	}
+	defer rows.Close()
+
+	var orders []models.Order
+	for rows.Next() {
+		var order models.Order
+		var itemsJSON []byte
+
+		err := rows.Scan(
+			&order.ID,
+			&order.CustomerID,
+			&order.Status,
+			&order.PaymentMethod,
+			&order.TotalPrice,
+			&order.SpecialInstructions,
+			&order.CreatedAt,
+			&order.UpdatedAt,
+			&itemsJSON,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan order: %w", err)
+		}
+
+		// Unmarshal JSON items
+		if err := json.Unmarshal(itemsJSON, &order.Items); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal order items: %w", err)
+		}
+
+		orders = append(orders, order)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error after scanning orders: %w", err)
+	}
+
+	return orders, nil
 }
