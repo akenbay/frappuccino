@@ -11,7 +11,7 @@ import (
 type ReportRepository interface {
 	GetTotalSales(ctx context.Context, startDate, endDate time.Time) (float64, error)
 	GetPopularItems(ctx context.Context, limit int) ([]models.PopularItem, error)
-	GetOrderedItemsByPeriod(ctx context.Context, period string, month time.Month, year int) ([]models.PeriodReport, error)
+	GetOrderedItemsByPeriod(ctx context.Context, period string, month time.Month, year int) (models.PeriodReportResponse, error)
 	GetFullTextSearch(ctx context.Context, query string, filter string) (models.SearchResult, error)
 }
 
@@ -75,60 +75,76 @@ func (r *reportRepository) GetPopularItems(ctx context.Context, limit int) ([]mo
 	return popularItems, nil
 }
 
-func (r *reportRepository) GetOrderedItemsByPeriod(ctx context.Context, period string, month time.Month, year int) ([]models.PeriodReport, error) {
+func (r *reportRepository) GetOrderedItemsByPeriod(ctx context.Context, period string, month time.Month, year int) (models.PeriodReportResponse, error) {
 	var query string
 	var args []interface{}
+	response := models.PeriodReportResponse{
+		PeriodType: period,
+		Year:       year,
+	}
 
 	switch period {
 	case "day":
+		response.Month = month.String()
 		query = `
-			SELECT 
-				EXTRACT(DAY FROM created_at)::int as period,
-				COUNT(*) as order_count,
-				COALESCE(SUM(total_price), 0) as total_sales
-			FROM orders
-			WHERE EXTRACT(MONTH FROM created_at) = $1
-			AND EXTRACT(YEAR FROM created_at) = $2
-			GROUP BY period
-			ORDER BY period
-		`
+            SELECT 
+                EXTRACT(DAY FROM created_at)::int as day,
+                COUNT(*) as order_count,
+                COALESCE(SUM(total_price), 0) as total_sales
+            FROM orders
+            WHERE EXTRACT(MONTH FROM created_at) = $1
+            AND EXTRACT(YEAR FROM created_at) = $2
+            GROUP BY day
+            ORDER BY day
+        `
 		args = []interface{}{month, year}
 	case "month":
 		query = `
-			SELECT 
-				EXTRACT(MONTH FROM created_at)::int as period,
-				COUNT(*) as order_count,
-				COALESCE(SUM(total_price), 0) as total_sales
-			FROM orders
-			WHERE EXTRACT(YEAR FROM created_at) = $1
-			GROUP BY period
-			ORDER BY period
-		`
+            SELECT 
+                TO_CHAR(created_at, 'Month') as month_name,
+                COUNT(*) as order_count,
+                COALESCE(SUM(total_price), 0) as total_sales
+            FROM orders
+            WHERE EXTRACT(YEAR FROM created_at) = $1
+            GROUP BY month_name, EXTRACT(MONTH FROM created_at)
+            ORDER BY EXTRACT(MONTH FROM created_at)
+        `
 		args = []interface{}{year}
 	default:
-		return nil, fmt.Errorf("invalid period: %s", period)
+		return models.PeriodReportResponse{}, fmt.Errorf("invalid period: %s", period)
 	}
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get ordered items by period: %w", err)
+		return models.PeriodReportResponse{}, fmt.Errorf("failed to get ordered items by period: %w", err)
 	}
 	defer rows.Close()
 
 	var reports []models.PeriodReport
 	for rows.Next() {
 		var report models.PeriodReport
-		if err := rows.Scan(&report.Period, &report.OrderCount, &report.TotalSales); err != nil {
-			return nil, fmt.Errorf("failed to scan period report: %w", err)
+		if period == "day" {
+			var day int
+			if err := rows.Scan(&day, &report.OrderCount, &report.TotalSales); err != nil {
+				return models.PeriodReportResponse{}, fmt.Errorf("failed to scan day report: %w", err)
+			}
+			report.Period = day
+		} else {
+			var monthName string
+			if err := rows.Scan(&monthName, &report.OrderCount, &report.TotalSales); err != nil {
+				return models.PeriodReportResponse{}, fmt.Errorf("failed to scan month report: %w", err)
+			}
+			report.Period = monthName
 		}
 		reports = append(reports, report)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows error: %w", err)
+		return models.PeriodReportResponse{}, fmt.Errorf("rows error: %w", err)
 	}
 
-	return reports, nil
+	response.Reports = reports
+	return response, nil
 }
 
 func (r *reportRepository) GetFullTextSearch(ctx context.Context, query string, filter string) (models.SearchResult, error) {

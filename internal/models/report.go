@@ -20,11 +20,19 @@ type PopularItem struct {
 	Percentage    float64 `json:"percentage,omitempty"` // Can be calculated client-side
 }
 
-// PeriodReport - For GET /reports/ordered-items-by-period
+// PeriodReport represents the report for ordered items by time period
 type PeriodReport struct {
-	Period     interface{} `json:"period"` // Can be int (day/month) or string (month name)
+	Period     interface{} `json:"period"` // Can be int (day) or string (month name)
 	OrderCount int         `json:"order_count"`
 	TotalSales float64     `json:"total_sales"`
+}
+
+// PeriodReportResponse is the full response structure
+type PeriodReportResponse struct {
+	PeriodType string         `json:"period_type"` // "day" or "month"
+	Month      string         `json:"month,omitempty"`
+	Year       int            `json:"year,omitempty"`
+	Reports    []PeriodReport `json:"reports"`
 }
 
 // SearchResult - For GET /reports/search
