@@ -123,20 +123,20 @@ func NewRouter(
 	handler = middleware.Recovery(handler)
 
 	// Order routes
-	mux.HandleFunc("POST /orders", orderHandler.CreateOrder)
-	mux.HandleFunc("GET /orders/{id}", orderHandler.GetOrder)
-	mux.HandleFunc("PUT /orders/{id}", orderHandler.UpdateOrder)
-	mux.HandleFunc("DELETE /orders/{id}", orderHandler.DeleteOrder)
-	mux.HandleFunc("POST /orders/{id}/close", orderHandler.CloseOrder)
-	mux.HandleFunc("GET /orders", orderHandler.ListOrders)
+	mux.HandleFunc("POST /orders", orderHandler.CreateOrder)           //works
+	mux.HandleFunc("GET /orders/{id}", orderHandler.GetOrder)          //works
+	mux.HandleFunc("PUT /orders/{id}", orderHandler.UpdateOrder)       //works
+	mux.HandleFunc("DELETE /orders/{id}", orderHandler.DeleteOrder)    //works
+	mux.HandleFunc("POST /orders/{id}/close", orderHandler.CloseOrder) //works
+	mux.HandleFunc("GET /orders", orderHandler.ListOrders)             //works
 	mux.HandleFunc("POST /orders/batch-process", orderHandler.ProcessBatchOrders)
-	mux.HandleFunc("GET /orders/numberOfOrderedItems", orderHandler.GetOrderedItemsReport)
+	mux.HandleFunc("GET /orders/numberOfOrderedItems", orderHandler.GetOrderedItemsReport) //works
 
 	// Report routes
 	mux.HandleFunc("GET /reports/orderedItemsByPeriod", reportHandler.GetOrderedItemsByPeriod)
 	mux.HandleFunc("GET /reports/search", reportHandler.Search)
-	mux.HandleFunc("GET /reports/total-sales", reportHandler.GetTotalSales)
-	mux.HandleFunc("GET /reports/popular-items", reportHandler.GetPopularItems)
+	mux.HandleFunc("GET /reports/total-sales", reportHandler.GetTotalSales)     //works
+	mux.HandleFunc("GET /reports/popular-items", reportHandler.GetPopularItems) //works
 
 	// Inventory routes
 	mux.HandleFunc("POST /inventory", inventoryHanlder.CreateIngredient)
