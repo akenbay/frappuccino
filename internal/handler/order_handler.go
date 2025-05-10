@@ -2,12 +2,13 @@ package handler
 
 import (
 	"encoding/json"
-	"frappuccino/internal/models"
-	"frappuccino/internal/service"
+	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
+
+	"frappuccino/internal/models"
+	"frappuccino/internal/service"
 )
 
 type OrderHandler struct {
@@ -18,103 +19,71 @@ func NewOrderHandler(orderService service.OrderService) *OrderHandler {
 	return &OrderHandler{orderService: orderService}
 }
 
-func (h *OrderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/orders")
-	path = strings.TrimSuffix(path, "/")
-
-	switch {
-	case r.Method == http.MethodPost && path == "":
-		h.createOrder(w, r)
-	case r.Method == http.MethodGet && path == "":
-		h.listOrders(w, r)
-	case r.Method == http.MethodGet && isSingleOrderPath(path):
-		h.getOrder(w, r)
-	case r.Method == http.MethodPut && isSingleOrderPath(path):
-		h.updateOrder(w, r)
-	case r.Method == http.MethodDelete && isSingleOrderPath(path):
-		h.deleteOrder(w, r)
-	case r.Method == http.MethodPost && strings.HasSuffix(path, "/close"):
-		h.closeOrder(w, r)
-	case r.Method == http.MethodGet && path == "/numberOfOrderedItems":
-		h.getOrderedItemsCount(w, r)
-	case r.Method == http.MethodPost && path == "/batch-process":
-		h.processBatchOrders(w, r)
-	default:
-		http.NotFound(w, r)
-	}
-}
-
-func isSingleOrderPath(path string) bool {
-	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	return len(parts) == 1 && parts[0] != ""
-}
-
-func extractOrderID(path string) (int, error) {
-	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	if len(parts) == 0 {
-		return 0, models.ErrInvalidOrderID
-	}
-	return strconv.Atoi(parts[0])
-}
-
-func (h *OrderHandler) createOrder(w http.ResponseWriter, r *http.Request) {
+func (h *OrderHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	var order models.Order
 	if err := json.NewDecoder(r.Body).Decode(&order); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
+		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	id, err := h.orderService.CreateOrder(r.Context(), order)
+	orderID, err := h.orderService.CreateOrder(r.Context(), order)
 	if err != nil {
 		switch err {
 		case models.ErrEmptyOrder, models.ErrInvalidTotalPrice:
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			http.Error(w, fmt.Sprintf("Failed to create order: %v", err), http.StatusInternalServerError)
 		}
 		return
 	}
 
-	respondWithJSON(w, http.StatusCreated, map[string]int{"id": id})
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id":      orderID,
+		"message": "Order created successfully",
+	})
 }
 
-func (h *OrderHandler) getOrder(w http.ResponseWriter, r *http.Request) {
-	id, err := extractOrderID(strings.TrimPrefix(r.URL.Path, "/orders"))
+func (h *OrderHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
 	if err != nil || id <= 0 {
-		respondWithError(w, http.StatusBadRequest, "Invalid order ID")
+		http.Error(w, models.ErrInvalidOrderID.Error(), http.StatusBadRequest)
 		return
 	}
 
 	order, err := h.orderService.GetOrder(r.Context(), id)
 	if err != nil {
 		if err == models.ErrInvalidOrderID {
-			respondWithError(w, http.StatusNotFound, "Order not found")
+			http.Error(w, "Order not found", http.StatusNotFound)
 		} else {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			http.Error(w, fmt.Sprintf("Failed to get order: %v", err), http.StatusInternalServerError)
 		}
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, order)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(order)
 }
 
-func (h *OrderHandler) listOrders(w http.ResponseWriter, r *http.Request) {
-	filters := models.OrderFilters{
-		Status: r.URL.Query().Get("status"),
-	}
+func (h *OrderHandler) ListOrders(w http.ResponseWriter, r *http.Request) {
+	filters := models.OrderFilters{}
 
+	// Parse query parameters
+	if status := r.URL.Query().Get("status"); status != "" {
+		filters.Status = status
+	}
 	if startDate := r.URL.Query().Get("start_date"); startDate != "" {
 		if parsed, err := time.Parse(time.RFC3339, startDate); err == nil {
 			filters.StartDate = parsed
 		}
 	}
-
 	if endDate := r.URL.Query().Get("end_date"); endDate != "" {
 		if parsed, err := time.Parse(time.RFC3339, endDate); err == nil {
 			filters.EndDate = parsed
 		}
 	}
-
 	if customerID := r.URL.Query().Get("customer_id"); customerID != "" {
 		if id, err := strconv.Atoi(customerID); err == nil {
 			filters.CustomerID = id
@@ -123,125 +92,155 @@ func (h *OrderHandler) listOrders(w http.ResponseWriter, r *http.Request) {
 
 	orders, err := h.orderService.ListOrders(r.Context(), filters)
 	if err != nil {
-		if err == models.ErrInvalidDateRange {
-			respondWithError(w, http.StatusBadRequest, err.Error())
-		} else {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+		switch err {
+		case models.ErrInvalidDateRange:
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			http.Error(w, fmt.Sprintf("Failed to list orders: %v", err), http.StatusInternalServerError)
 		}
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, orders)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(orders)
 }
 
-func (h *OrderHandler) updateOrder(w http.ResponseWriter, r *http.Request) {
-	id, err := extractOrderID(strings.TrimPrefix(r.URL.Path, "/orders"))
+func (h *OrderHandler) UpdateOrder(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
 	if err != nil || id <= 0 {
-		respondWithError(w, http.StatusBadRequest, "Invalid order ID")
+		http.Error(w, models.ErrInvalidOrderID.Error(), http.StatusBadRequest)
 		return
 	}
 
 	var order models.Order
 	if err := json.NewDecoder(r.Body).Decode(&order); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
+		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	if err := h.orderService.UpdateOrder(r.Context(), id, order); err != nil {
+	err = h.orderService.UpdateOrder(r.Context(), id, order)
+	if err != nil {
 		switch err {
 		case models.ErrInvalidOrderID:
-			respondWithError(w, http.StatusNotFound, "Order not found")
+			http.Error(w, "Order not found", http.StatusNotFound)
 		case models.ErrEmptyOrder, models.ErrInvalidTotalPrice:
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			http.Error(w, fmt.Sprintf("Failed to update order: %v", err), http.StatusInternalServerError)
 		}
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Order updated successfully"})
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Order updated successfully",
+	})
 }
 
-func (h *OrderHandler) deleteOrder(w http.ResponseWriter, r *http.Request) {
-	id, err := extractOrderID(strings.TrimPrefix(r.URL.Path, "/orders"))
+func (h *OrderHandler) DeleteOrder(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
 	if err != nil || id <= 0 {
-		respondWithError(w, http.StatusBadRequest, "Invalid order ID")
+		http.Error(w, models.ErrInvalidOrderID.Error(), http.StatusBadRequest)
 		return
 	}
 
-	if err := h.orderService.DeleteOrder(r.Context(), id); err != nil {
+	err = h.orderService.DeleteOrder(r.Context(), id)
+	if err != nil {
 		if err == models.ErrInvalidOrderID {
-			respondWithError(w, http.StatusNotFound, "Order not found")
+			http.Error(w, "Order not found", http.StatusNotFound)
 		} else {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			http.Error(w, fmt.Sprintf("Failed to delete order: %v", err), http.StatusInternalServerError)
 		}
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Order deleted successfully"})
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Order deleted successfully",
+	})
 }
 
-func (h *OrderHandler) closeOrder(w http.ResponseWriter, r *http.Request) {
-	id, err := extractOrderID(strings.TrimPrefix(r.URL.Path, "/orders"))
+func (h *OrderHandler) CloseOrder(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
 	if err != nil || id <= 0 {
-		respondWithError(w, http.StatusBadRequest, "Invalid order ID")
+		http.Error(w, models.ErrInvalidOrderID.Error(), http.StatusBadRequest)
 		return
 	}
 
-	if err := h.orderService.CloseOrder(r.Context(), id); err != nil {
+	err = h.orderService.CloseOrder(r.Context(), id)
+	if err != nil {
 		switch err {
 		case models.ErrInvalidOrderID:
-			respondWithError(w, http.StatusNotFound, "Order not found")
+			http.Error(w, "Order not found", http.StatusNotFound)
 		default:
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			http.Error(w, fmt.Sprintf("Failed to close order: %v", err), http.StatusInternalServerError)
 		}
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Order closed successfully"})
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Order closed successfully",
+	})
 }
 
-func (h *OrderHandler) getOrderedItemsCount(w http.ResponseWriter, r *http.Request) {
-	startDate, endDate, err := parseDateRange(r)
+func (h *OrderHandler) GetOrderedItemsReport(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	startDateStr := r.URL.Query().Get("start_date")
+	endDateStr := r.URL.Query().Get("end_date")
+
+	startDate, err := time.Parse(time.RFC3339, startDateStr)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, err.Error())
+		http.Error(w, "Invalid start_date format (use RFC3339)", http.StatusBadRequest)
 		return
 	}
 
-	counts, err := h.orderService.GetOrderedItemsReport(r.Context(), startDate, endDate)
+	endDate, err := time.Parse(time.RFC3339, endDateStr)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, err.Error())
+		http.Error(w, "Invalid end_date format (use RFC3339)", http.StatusBadRequest)
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, counts)
+	report, err := h.orderService.GetOrderedItemsReport(r.Context(), startDate, endDate)
+	if err != nil {
+		switch err {
+		case models.ErrInvalidDateRange:
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			http.Error(w, fmt.Sprintf("Failed to generate report: %v", err), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(report)
 }
 
-func (h *OrderHandler) processBatchOrders(w http.ResponseWriter, r *http.Request) {
-	var request struct {
-		Orders []models.Order `json:"orders"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
+func (h *OrderHandler) ProcessBatchOrders(w http.ResponseWriter, r *http.Request) {
+	var batchRequest models.BatchOrderRequest
+	if err := json.NewDecoder(r.Body).Decode(&batchRequest); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	if len(request.Orders) == 0 {
-		respondWithError(w, http.StatusBadRequest, "Empty batch")
-		return
-	}
-
-	response, err := h.orderService.ProcessBatchOrders(r.Context(), request.Orders)
+	response, err := h.orderService.ProcessBatchOrders(r.Context(), batchRequest.Orders)
 	if err != nil {
 		switch err {
 		case models.ErrEmptyBatch, models.ErrEmptyOrder, models.ErrInvalidTotalPrice:
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			http.Error(w, fmt.Sprintf("Failed to process batch orders: %v", err), http.StatusInternalServerError)
 		}
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, response)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
 }

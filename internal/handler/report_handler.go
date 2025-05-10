@@ -1,12 +1,14 @@
 package handler
 
 import (
-	"frappuccino/internal/models"
-	"frappuccino/internal/service"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
+
+	"frappuccino/internal/models"
+	"frappuccino/internal/service"
 )
 
 type ReportHandler struct {
@@ -17,174 +19,125 @@ func NewReportHandler(reportService service.ReportService) *ReportHandler {
 	return &ReportHandler{reportService: reportService}
 }
 
-// GetTotalSales handles GET /reports/total-sales
 func (h *ReportHandler) GetTotalSales(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		respondWithError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
+	// Parse query parameters
+	startDateStr := r.URL.Query().Get("start_date")
+	endDateStr := r.URL.Query().Get("end_date")
 
-	startDate, endDate, err := parseDateRange(r)
+	startDate, err := time.Parse(time.RFC3339, startDateStr)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, err.Error())
+		http.Error(w, "Invalid start_date format (use RFC3339)", http.StatusBadRequest)
 		return
 	}
 
-	result, err := h.reportService.GetTotalSales(r.Context(), startDate, endDate)
+	endDate, err := time.Parse(time.RFC3339, endDateStr)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "failed to get total sales")
+		http.Error(w, "Invalid end_date format (use RFC3339)", http.StatusBadRequest)
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, result)
+	// Validate date range
+	if startDate.After(endDate) {
+		http.Error(w, "start_date must be before end_date", http.StatusBadRequest)
+		return
+	}
+
+	response, err := h.reportService.GetTotalSales(r.Context(), startDate, endDate)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get total sales: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
-// GetPopularItems handles GET /reports/popular-items
 func (h *ReportHandler) GetPopularItems(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		respondWithError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	limit := 10
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+	limitStr := r.URL.Query().Get("limit")
+	limit := 10 // default value
+	if limitStr != "" {
 		var err error
 		limit, err = strconv.Atoi(limitStr)
 		if err != nil || limit <= 0 {
-			respondWithError(w, http.StatusBadRequest, "invalid limit parameter")
+			http.Error(w, "limit must be a positive integer", http.StatusBadRequest)
 			return
 		}
 	}
 
 	items, err := h.reportService.GetPopularItems(r.Context(), limit)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "failed to get popular items")
+		http.Error(w, fmt.Sprintf("Failed to get popular items: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, items)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(items)
 }
 
-// GetOrderedItemsByPeriod handles GET /reports/period/{period}
 func (h *ReportHandler) GetOrderedItemsByPeriod(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		respondWithError(w, http.StatusMethodNotAllowed, "Method not allowed")
+	// Parse query parameters
+	period := r.URL.Query().Get("period")
+	monthStr := r.URL.Query().Get("month")
+	yearStr := r.URL.Query().Get("year")
+
+	// Validate period
+	if period != "daily" && period != "weekly" && period != "monthly" {
+		http.Error(w, "period must be one of: daily, weekly, monthly", http.StatusBadRequest)
 		return
 	}
 
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 4 {
-		respondWithError(w, http.StatusBadRequest, "invalid path")
-		return
-	}
-	period := pathParts[3]
+	// Parse month and year
+	var month time.Month
+	var year int
+	var err error
 
-	if period != "day" && period != "month" {
-		respondWithError(w, http.StatusBadRequest, "invalid period type")
-		return
-	}
-
-	year := time.Now().Year()
-	if yearStr := r.URL.Query().Get("year"); yearStr != "" {
-		var err error
-		year, err = strconv.Atoi(yearStr)
-		if err != nil {
-			respondWithError(w, http.StatusBadRequest, "invalid year parameter")
+	if monthStr != "" {
+		monthInt, err := strconv.Atoi(monthStr)
+		if err != nil || monthInt < 1 || monthInt > 12 {
+			http.Error(w, "month must be between 1 and 12", http.StatusBadRequest)
 			return
 		}
+		month = time.Month(monthInt)
+	} else {
+		month = time.Now().Month()
 	}
 
-	var month time.Month = time.January
-	if period == "day" {
-		if monthStr := r.URL.Query().Get("month"); monthStr != "" {
-			var err error
-			month, err = parseMonth(monthStr)
-			if err != nil {
-				respondWithError(w, http.StatusBadRequest, "invalid month parameter")
-				return
-			}
-		} else {
-			month = time.Now().Month()
+	if yearStr != "" {
+		year, err = strconv.Atoi(yearStr)
+		if err != nil || year < 2000 || year > time.Now().Year() {
+			http.Error(w, "year must be between 2000 and current year", http.StatusBadRequest)
+			return
 		}
+	} else {
+		year = time.Now().Year()
 	}
 
-	result, err := h.reportService.GetOrderedItemsByPeriod(r.Context(), period, month, year)
+	response, err := h.reportService.GetOrderedItemsByPeriod(r.Context(), period, month, year)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "failed to get period report")
+		http.Error(w, fmt.Sprintf("Failed to get period report: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, result)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
-// Search handles GET /reports/search
 func (h *ReportHandler) Search(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		respondWithError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
 	query := r.URL.Query().Get("query")
+	filter := r.URL.Query().Get("filter")
+
 	if query == "" {
-		respondWithError(w, http.StatusBadRequest, "query parameter is required")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(models.SearchResult{})
 		return
 	}
-
-	// Get and process filter parameter
-	filterParam := r.URL.Query().Get("filter")
-	if filterParam == "" {
-		filterParam = "all"
-	}
-
-	// Split comma-separated filters and validate each
-	filterParts := strings.Split(filterParam, ",")
-	validFilters := make([]string, 0, len(filterParts))
-
-	for _, part := range filterParts {
-		trimmed := strings.TrimSpace(part)
-		if isValidFilter(trimmed) {
-			validFilters = append(validFilters, trimmed)
-		}
-	}
-
-	// If no valid filters remain, use default "all"
-	if len(validFilters) == 0 {
-		validFilters = append(validFilters, "all")
-	}
-
-	// Join back to comma-separated string for service layer
-	filter := strings.Join(validFilters, ",")
 
 	result, err := h.reportService.Search(r.Context(), query, filter)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "failed to perform search")
+		http.Error(w, fmt.Sprintf("Search failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, result)
-}
-
-func parseMonth(monthStr string) (time.Month, error) {
-	month, err := strconv.Atoi(monthStr)
-	if err == nil && month >= 1 && month <= 12 {
-		return time.Month(month), nil
-	}
-
-	// Try parsing as month name
-	for i := 1; i <= 12; i++ {
-		if strings.EqualFold(time.Month(i).String(), monthStr) {
-			return time.Month(i), nil
-		}
-	}
-
-	return time.January, models.ErrInvalidMonth
-}
-
-func isValidFilter(filter string) bool {
-	switch filter {
-	case "all", "menu", "orders", "customers":
-		return true
-	default:
-		return false
-	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
 }
