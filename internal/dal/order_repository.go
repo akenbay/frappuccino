@@ -353,6 +353,10 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, id int, updatedOrder 
 	}
 
 	// 5. Update order metadata
+	var special_instructions interface{} = nil
+	if len(updatedOrder.SpecialInstructions) > 0 {
+		special_instructions = updatedOrder.SpecialInstructions
+	}
 	result, err := tx.ExecContext(ctx, `
         UPDATE orders 
         SET 
@@ -367,7 +371,7 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, id int, updatedOrder 
 		updatedOrder.Status,
 		updatedOrder.PaymentMethod,
 		updatedOrder.TotalPrice,
-		updatedOrder.SpecialInstructions,
+		special_instructions,
 		id,
 	)
 	if err != nil {
@@ -393,6 +397,10 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, id int, updatedOrder 
 
 	// 7. Insert new order items
 	for _, item := range updatedOrder.Items {
+		var customizations interface{} = nil
+		if len(item.Customizations) > 0 {
+			customizations = item.Customizations
+		}
 		_, err = tx.ExecContext(ctx, `
             INSERT INTO order_items (
                 order_id, 
@@ -405,7 +413,7 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, id int, updatedOrder 
 			item.MenuItemID,
 			item.Quantity,
 			item.PriceAtOrder,
-			item.Customizations,
+			customizations,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert order item: %w", err)
