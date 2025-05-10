@@ -191,13 +191,6 @@ func (r *inventoryRepository) DeleteIngredient(ctx context.Context, id int) erro
 }
 
 func (r *inventoryRepository) GetLeftOversWithPagination(ctx context.Context, sortBy string, page int, pageSize int) (models.PaginatedInventoryResponse, error) {
-	// Validate and set default values
-	if pageSize <= 0 {
-		return models.PaginatedInventoryResponse{}, fmt.Errorf("invalid page size")
-	}
-	if page <= 0 {
-		return models.PaginatedInventoryResponse{}, fmt.Errorf("invalid page")
-	}
 	offset := (page - 1) * pageSize
 
 	// Determine sort order
