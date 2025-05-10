@@ -132,6 +132,12 @@ func NewRouter(
 	mux.HandleFunc("POST /orders/batch-process", orderHandler.ProcessBatchOrders)
 	mux.HandleFunc("GET /orders/numberOfOrderedItems", orderHandler.GetOrderedItemsReport)
 
+	// Report routes
+	mux.HandleFunc("GET /reports/orderedItemsByPeriod", reportHandler.GetOrderedItemsByPeriod)
+	mux.HandleFunc("GET /reports/search", reportHandler.Search)
+	mux.HandleFunc("GET /reports/total-sales", reportHandler.GetTotalSales)
+	mux.HandleFunc("GET /reports/popular-items", reportHandler.GetPopularItems)
+
 	// Inventory routes
 	mux.HandleFunc("POST /inventory", inventoryHanlder.CreateIngredient)
 	mux.HandleFunc("GET /inventory/{id}", inventoryHanlder.GetIngredient)

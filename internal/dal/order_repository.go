@@ -700,25 +700,37 @@ func (r *orderRepository) GetAllOrders(ctx context.Context, filters models.Order
 
 func (r *orderRepository) GetNumberOfOrderedItems(ctx context.Context, startDate, endDate string) (map[string]int, error) {
 	query := `
-		SELECT mi.name, SUM(oi.quantity) as total_quantity
-		FROM order_items oi
-		JOIN menu_items mi ON oi.menu_item_id = mi.id
-		JOIN orders o ON oi.order_id = o.id
-	`
+        SELECT mi.name, SUM(oi.quantity) as total_quantity
+        FROM order_items oi
+        JOIN menu_items mi ON oi.menu_item_id = mi.id
+        JOIN orders o ON oi.order_id = o.id
+    `
 
-	if startDate != "" && endDate != "" {
-		query += `
-		WHERE o.created_at BETWEEN $1 AND $2
-	`
-	} else if startDate == "" && endDate != "" {
+	var args []interface{}
+	var whereClauses []string
+
+	// Handle date filtering
+	if startDate != "" {
+		whereClauses = append(whereClauses, "o.created_at >= $1")
+		args = append(args, startDate)
+	}
+	if endDate != "" {
+		pos := len(args) + 1
+		whereClauses = append(whereClauses, fmt.Sprintf("o.created_at <= $%d", pos))
+		args = append(args, endDate)
+	}
+
+	// Add WHERE clause if needed
+	if len(whereClauses) > 0 {
+		query += " WHERE " + strings.Join(whereClauses, " AND ")
 	}
 
 	query += `
-		GROUP BY mi.name
-		ORDER BY total_quantity DESC
-	`
+        GROUP BY mi.name
+        ORDER BY total_quantity DESC
+    `
 
-	rows, err := r.db.QueryContext(ctx, query, startDate, endDate)
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query ordered items: %w", err)
 	}
@@ -742,11 +754,25 @@ func (r *orderRepository) GetNumberOfOrderedItems(ctx context.Context, startDate
 }
 
 func (r *orderRepository) BatchProcessOrders(ctx context.Context, orders []models.Order) (models.BatchOrderResponse, error) {
-	tx, err := r.db.BeginTx(ctx, nil)
+	// Validate input first
+	if len(orders) == 0 {
+		return models.BatchOrderResponse{}, models.ErrEmptyBatch
+	}
+
+	// Start transaction with context
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{
+		Isolation: sql.LevelSerializable,
+	})
 	if err != nil {
 		return models.BatchOrderResponse{}, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+
+	// Ensure we rollback if anything fails
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
 
 	response := models.BatchOrderResponse{
 		ProcessedOrders: make([]models.ProcessedOrder, 0, len(orders)),
@@ -755,15 +781,26 @@ func (r *orderRepository) BatchProcessOrders(ctx context.Context, orders []model
 		},
 	}
 
-	inventoryUpdates := make(map[int]float64) // ingredientID -> quantity used
+	inventoryUpdates := make(map[int]float64)
 
 	for _, order := range orders {
+		// Validate each order before processing
+		if len(order.Items) == 0 {
+			response.ProcessedOrders = append(response.ProcessedOrders, models.ProcessedOrder{
+				Status:       "rejected",
+				Rejected:     true,
+				RejectReason: "empty order items",
+			})
+			response.Summary.Rejected++
+			continue
+		}
+
 		processed := models.ProcessedOrder{
 			CustomerName: fmt.Sprintf("Customer %d", order.CustomerID),
 			Total:        order.TotalPrice,
 		}
 
-		// Check inventory availability first
+		// Check inventory with context
 		canFulfill, rejectReason := r.checkInventory(ctx, tx, order.Items, inventoryUpdates)
 		if !canFulfill {
 			processed.Status = "rejected"
@@ -774,10 +811,26 @@ func (r *orderRepository) BatchProcessOrders(ctx context.Context, orders []model
 			continue
 		}
 
-		// Process the order
-		orderID, err := r.CreateOrder(ctx, order)
+		// Process order within the same transaction
+		var orderID int
+		err = tx.QueryRowContext(ctx, `
+            INSERT INTO orders (customer_id, status, total_price) 
+            VALUES ($1, 'pending', $2)
+            RETURNING id`,
+			order.CustomerID, order.TotalPrice).Scan(&orderID)
 		if err != nil {
 			return models.BatchOrderResponse{}, fmt.Errorf("failed to create order: %w", err)
+		}
+
+		// Insert order items
+		for _, item := range order.Items {
+			_, err = tx.ExecContext(ctx, `
+                INSERT INTO order_items (order_id, menu_item_id, quantity, price_at_order)
+                VALUES ($1, $2, $3, $4)`,
+				orderID, item.MenuItemID, item.Quantity, item.PriceAtOrder)
+			if err != nil {
+				return models.BatchOrderResponse{}, fmt.Errorf("failed to add order item: %w", err)
+			}
 		}
 
 		processed.OrderID = orderID
@@ -787,12 +840,12 @@ func (r *orderRepository) BatchProcessOrders(ctx context.Context, orders []model
 		response.Summary.TotalRevenue += order.TotalPrice
 	}
 
-	// Prepare inventory usage report
+	// Prepare inventory report
 	for id, qty := range inventoryUpdates {
 		var name string
 		var remaining float64
-		err := tx.QueryRowContext(ctx, `
-			SELECT name, quantity FROM inventory WHERE id = $1`, id).Scan(&name, &remaining)
+		err = tx.QueryRowContext(ctx, `
+            SELECT name, quantity FROM inventory WHERE id = $1`, id).Scan(&name, &remaining)
 		if err != nil {
 			return models.BatchOrderResponse{}, fmt.Errorf("failed to get inventory info: %w", err)
 		}
@@ -807,7 +860,8 @@ func (r *orderRepository) BatchProcessOrders(ctx context.Context, orders []model
 
 	response.Summary.TotalOrders = len(orders)
 
-	if err := tx.Commit(); err != nil {
+	// Commit transaction
+	if err = tx.Commit(); err != nil {
 		return models.BatchOrderResponse{}, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 

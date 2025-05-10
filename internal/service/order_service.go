@@ -62,9 +62,6 @@ func (s *orderService) UpdateOrder(ctx context.Context, id int, order models.Ord
 	if len(order.Items) == 0 {
 		return models.ErrEmptyOrder
 	}
-	if order.TotalPrice <= 0 {
-		return models.ErrInvalidTotalPrice
-	}
 
 	return s.orderRepo.UpdateOrder(ctx, id, order)
 }
@@ -96,9 +93,6 @@ func (s *orderService) ProcessBatchOrders(ctx context.Context, orders []models.O
 	for _, order := range orders {
 		if len(order.Items) == 0 {
 			return models.BatchOrderResponse{}, models.ErrEmptyOrder
-		}
-		if order.TotalPrice <= 0 {
-			return models.BatchOrderResponse{}, models.ErrInvalidTotalPrice
 		}
 	}
 
