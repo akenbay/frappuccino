@@ -30,9 +30,6 @@ func (s *orderService) CreateOrder(ctx context.Context, order models.Order) (int
 	if len(order.Items) == 0 {
 		return 0, models.ErrEmptyOrder
 	}
-	if order.TotalPrice <= 0 {
-		return 0, models.ErrInvalidTotalPrice
-	}
 
 	// Set default status if not provided
 	if order.Status == "" {

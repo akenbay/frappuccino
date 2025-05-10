@@ -30,19 +30,19 @@ func main() {
 	orderRepo := dal.NewOrderRepository(db)
 	reportRepo := dal.NewReportRepository(db)
 	inventoryRepo := dal.NewInventoryRepository(db)
-	menuRepo := dal.MenuRepository(db)
+	menuRepo := dal.NewMenuRepository(db)
 
 	// Initialize services
 	orderService := service.NewOrderService(orderRepo)
 	reportService := service.NewReportService(reportRepo)
 	inventoryService := service.NewInventoryService(inventoryRepo)
-	menuService := service.MenuService(menuRepo)
+	menuService := service.NewMenuService(menuRepo)
 
 	// Initialize handlers
 	orderHandler := handler.NewOrderHandler(orderService)
 	reportHandler := handler.NewReportHandler(reportService)
 	inventoryHandler := handler.NewInventoryHandler(inventoryService)
-	menuHandler := handler.MenuHandler(menuService)
+	menuHandler := handler.NewMenuHandler(menuService)
 
 	// Create router
 	router := NewRouter(orderHandler, reportHandler, inventoryHandler, menuHandler)
