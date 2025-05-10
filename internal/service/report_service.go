@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"frappuccino/internal/dal"
 	"frappuccino/internal/models"
 	"time"
@@ -11,7 +12,7 @@ type ReportService interface {
 	GetTotalSales(ctx context.Context, startDate, endDate string) (*models.TotalSalesResponse, error)
 	GetPopularItems(ctx context.Context, limit int) ([]models.PopularItem, error)
 	GetOrderedItemsByPeriod(ctx context.Context, period string, month time.Month, year int) (*models.PeriodReportResponse, error)
-	Search(ctx context.Context, query string, filter string) (*models.SearchResult, error)
+	Search(ctx context.Context, query string, filter string, minPrice float64, maxPrice float64) (*models.SearchResult, error)
 }
 
 type reportService struct {
@@ -66,14 +67,29 @@ func (s *reportService) GetOrderedItemsByPeriod(ctx context.Context, period stri
 	return &response, nil
 }
 
-func (s *reportService) Search(ctx context.Context, query string, filter string) (*models.SearchResult, error) {
-	if query == "" {
-		return &models.SearchResult{}, nil
+func (s *reportService) Search(
+	ctx context.Context,
+	query string,
+	filter string,
+	minPrice float64,
+	maxPrice float64,
+) (*models.SearchResult, error) {
+	// Set default filter if empty
+	if filter == "" {
+		filter = "all"
 	}
 
-	result, err := s.repo.GetFullTextSearch(ctx, query, filter)
+	// Validate price range
+	if minPrice < 0 || maxPrice < 0 {
+		return nil, fmt.Errorf("price values cannot be negative")
+	}
+	if maxPrice > 0 && minPrice > maxPrice {
+		return nil, fmt.Errorf("minPrice cannot be greater than maxPrice")
+	}
+
+	result, err := s.repo.GetFullTextSearch(ctx, query, filter, minPrice, maxPrice)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("search failed: %w", err)
 	}
 
 	return &result, nil

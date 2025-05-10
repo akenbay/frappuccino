@@ -134,9 +134,9 @@ func NewRouter(
 
 	// Report routes
 	mux.HandleFunc("GET /reports/orderedItemsByPeriod", reportHandler.GetOrderedItemsByPeriod) //works
-	mux.HandleFunc("GET /reports/search", reportHandler.Search)
-	mux.HandleFunc("GET /reports/total-sales", reportHandler.GetTotalSales)     //works
-	mux.HandleFunc("GET /reports/popular-items", reportHandler.GetPopularItems) //works
+	mux.HandleFunc("GET /reports/search", reportHandler.Search)                                //works
+	mux.HandleFunc("GET /reports/total-sales", reportHandler.GetTotalSales)                    //works
+	mux.HandleFunc("GET /reports/popular-items", reportHandler.GetPopularItems)                //works
 
 	// Inventory routes
 	mux.HandleFunc("POST /inventory", inventoryHanlder.CreateIngredient)
@@ -150,7 +150,7 @@ func NewRouter(
 	mux.HandleFunc("GET /menu/{id}", menuHandler.GetMenuItem)
 	mux.HandleFunc("PUT /menu/{id}", menuHandler.UpdateMenuItem)
 	mux.HandleFunc("DELETE /menu/{id}", menuHandler.DeleteMenuItem)
-	mux.HandleFunc("GET /menu", menuHandler.ListMenuItems)
+	mux.HandleFunc("GET /menu", menuHandler.ListMenuItems) //works
 
 	// Health check
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {

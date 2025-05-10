@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"frappuccino/internal/models"
 	"frappuccino/internal/service"
 )
 
@@ -149,21 +148,57 @@ func parseMonthName(monthStr string) (time.Month, error) {
 }
 
 func (h *ReportHandler) Search(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query().Get("query")
-	filter := r.URL.Query().Get("filter")
+	// Get all query parameters
+	query := r.URL.Query().Get("q")
+	filterParam := r.URL.Query().Get("filter")
 
+	// Parse price filters with default 0 values
+	minPrice, err := strconv.ParseFloat(r.URL.Query().Get("minPrice"), 64)
+	if err != nil {
+		minPrice = 0
+	}
+	maxPrice, err := strconv.ParseFloat(r.URL.Query().Get("maxPrice"), 64)
+	if err != nil {
+		maxPrice = 0
+	}
+
+	// Validate required query parameter
 	if query == "" {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(models.SearchResult{})
+		http.Error(w, "Search query (q) is required", http.StatusBadRequest)
 		return
 	}
 
-	result, err := h.reportService.Search(r.Context(), query, filter)
+	// Process filter parameter (default to "all" if empty)
+	filter := "all"
+	if filterParam != "" {
+		// Normalize filter string (remove spaces, convert to lowercase)
+		normalized := strings.ToLower(strings.ReplaceAll(filterParam, " ", ""))
+
+		// Check if it contains multiple values
+		if strings.Contains(normalized, ",") {
+			// If any part is "all", it overrides everything
+			if strings.Contains(normalized, "all") {
+				filter = "all"
+			} else {
+				// Otherwise use the comma-separated values as-is
+				filter = normalized
+			}
+		} else {
+			// Single filter value
+			filter = normalized
+		}
+	}
+
+	// Call service with all parameters
+	result, err := h.reportService.Search(r.Context(), query, filter, minPrice, maxPrice)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Search failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
+	// Return successful response
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
