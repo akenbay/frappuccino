@@ -63,11 +63,15 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order) (
 	// 2. Insert order
 
 	var id int
+	var special_instructions interface{} = nil
+	if len(order.SpecialInstructions) > 0 {
+		special_instructions = order.SpecialInstructions
+	}
 	err = tx.QueryRowContext(ctx, `
 		INSERT INTO orders (customer_id, payment_method, total_price, special_instructions) 
 		VALUES ($1, $2, $3, $4)
 		RETURNING id`,
-		order.CustomerID, order.PaymentMethod, order.TotalPrice, order.SpecialInstructions,
+		order.CustomerID, order.PaymentMethod, order.TotalPrice, special_instructions,
 	).Scan(&id)
 
 	if err != nil {
@@ -76,10 +80,14 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order) (
 
 	// 3. Insert order items
 	for _, item := range order.Items {
+		var customizations interface{} = nil
+		if len(item.Customizations) > 0 {
+			customizations = item.Customizations
+		}
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO order_items (order_id, menu_item_id, quantity, price_at_order, customizations)
 			VALUES ($1, $2, $3, $4, $5)`,
-			id, item.MenuItemID, item.Quantity, item.PriceAtOrder, item.Customizations,
+			id, item.MenuItemID, item.Quantity, item.PriceAtOrder, customizations,
 		)
 		if err != nil {
 			return 0, fmt.Errorf("failed to add order item: %w", err)
