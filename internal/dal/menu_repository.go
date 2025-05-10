@@ -258,8 +258,14 @@ func (r *menuRepository) UpdateMenuItem(ctx context.Context, id int, item models
 
 // DeleteMenuItem deletes a menu item if it’s not used in any orders
 func (r *menuRepository) DeleteMenuItem(ctx context.Context, id int) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
 	var count int
-	err := r.db.QueryRowContext(ctx,
+	err = r.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM order_items WHERE menu_item_id = $1`, id).Scan(&count)
 	if err != nil {
 		return fmt.Errorf("check order usage: %w", err)
@@ -268,9 +274,23 @@ func (r *menuRepository) DeleteMenuItem(ctx context.Context, id int) error {
 		return fmt.Errorf("cannot delete menu item in use")
 	}
 
-	_, err = r.db.ExecContext(ctx, `DELETE FROM menu_items WHERE id = $1`, id)
+	result, err := r.db.ExecContext(ctx, `DELETE FROM menu_items WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("delete menu item: %w", err)
 	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	// Commit transaction if everything succeeded
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
 	return nil
 }
