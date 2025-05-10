@@ -11,7 +11,7 @@ import (
 
 type InventoryRepository interface {
 	CreateIngredient(ctx context.Context, ingredient models.Inventory) (int, error)
-	GetAllIngredients(ctx context.Context, id int) error
+	GetAllIngredients(ctx context.Context) ([]models.Inventory, error)
 	GetIngredientByID(ctx context.Context, id int) (models.Inventory, error)
 	UpdateIngredient(ctx context.Context, id int, ingredient models.Inventory) error
 	DeleteIngredient(ctx context.Context, id int) error
@@ -26,10 +26,10 @@ func NewInventoryRepository(db *sql.DB) *inventoryRepository {
 	return &inventoryRepository{NewRepository(db)}
 }
 
-func (r *inventoryRepository) AddIngredient(ctx context.Context, ingredient models.Inventory) (int, error) {
+func (r *inventoryRepository) CreateIngredient(ctx context.Context, ingredient models.Inventory) (int, error) {
 	var id int
 	err := r.db.QueryRowContext(ctx, `
-		INSERT INTO  (name, quantity, unit, cost_per_unit, reorder_level, supplier_info) 
+		INSERT INTO inventory (name, quantity, unit, cost_per_unit, reorder_level, supplier_info) 
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id`,
 		ingredient.Name, ingredient.Quantity, ingredient.Unit, ingredient.CostPerUnit, ingredient.ReOrderLevel, ingredient.SupplierInfo,
@@ -108,7 +108,7 @@ func (r *inventoryRepository) GetIngredientByID(ctx context.Context, id int) (mo
 	return ingredient, nil
 }
 
-func (r *orderRepository) UpdateIngredient(ctx context.Context, id int, ingredient models.Inventory) error {
+func (r *inventoryRepository) UpdateIngredient(ctx context.Context, id int, ingredient models.Inventory) error {
 	// Begin transaction
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -157,7 +157,7 @@ func (r *orderRepository) UpdateIngredient(ctx context.Context, id int, ingredie
 	return nil
 }
 
-func (r *orderRepository) DeleteIngredient(ctx context.Context, id int) error {
+func (r *inventoryRepository) DeleteIngredient(ctx context.Context, id int) error {
 	// Begin transaction
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
