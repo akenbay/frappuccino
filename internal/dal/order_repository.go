@@ -55,6 +55,13 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order) (
 		}
 	}
 
+	// Calculate total price based on items
+	totalPrice, err := r.calculateOrderTotal(ctx, tx, order.Items)
+	if err != nil {
+		return 0, fmt.Errorf("failed to calculate order total: %w", err)
+	}
+	order.TotalPrice = totalPrice
+
 	// 2. Insert order
 
 	var id int
@@ -209,6 +216,13 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, id int, updatedOrder 
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
+
+	// Calculate new total price
+	totalPrice, err := r.calculateOrderTotal(ctx, tx, updatedOrder.Items)
+	if err != nil {
+		return fmt.Errorf("failed to calculate order total: %w", err)
+	}
+	updatedOrder.TotalPrice = totalPrice
 
 	// 1. Get current order items (to calculate inventory delta)
 	var currentItems []struct {
@@ -815,4 +829,24 @@ func (r *orderRepository) checkInventory(ctx context.Context, tx *sql.Tx, items 
 		}
 	}
 	return true, ""
+}
+
+func (r *orderRepository) calculateOrderTotal(ctx context.Context, tx *sql.Tx, items []models.OrderItem) (float64, error) {
+	var total float64
+
+	for _, item := range items {
+		// Get current price of the menu item
+		var price float64
+		err := tx.QueryRowContext(ctx, `
+            SELECT price FROM menu_items 
+            WHERE id = $1`, item.MenuItemID).Scan(&price)
+		if err != nil {
+			return 0, fmt.Errorf("failed to get price for menu item %d: %w", item.MenuItemID, err)
+		}
+
+		// Add to total
+		total += price * float64(item.Quantity)
+	}
+
+	return total, nil
 }
