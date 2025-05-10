@@ -8,4 +8,4 @@ RUN go build -o frappuccino ./cmd/main.go
 
 EXPOSE 8080
 
-CMD ["./main"]
+CMD ["/app/frappuccino"]
