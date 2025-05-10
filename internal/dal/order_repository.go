@@ -182,7 +182,8 @@ func (r *orderRepository) GetOrderByID(ctx context.Context, id int) (models.Orde
             menu_item_id,
             quantity,
             price_at_order,
-            customizations
+            customizations,
+			order_id
         FROM order_items
         WHERE order_id = $1`, id)
 	if err != nil {
@@ -200,6 +201,7 @@ func (r *orderRepository) GetOrderByID(ctx context.Context, id int) (models.Orde
 			&item.Quantity,
 			&item.PriceAtOrder,
 			&customizations,
+			&item.OrderID,
 		); err != nil {
 			return models.Order{}, fmt.Errorf("failed to scan order item: %w", err)
 		}
