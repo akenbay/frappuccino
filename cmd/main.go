@@ -30,19 +30,22 @@ func main() {
 	orderRepo := dal.NewOrderRepository(db)
 	reportRepo := dal.NewReportRepository(db)
 	inventoryRepo := dal.NewInventoryRepository(db)
+	menuRepo := dal.MenuRepository(db)
 
 	// Initialize services
 	orderService := service.NewOrderService(orderRepo)
 	reportService := service.NewReportService(reportRepo)
 	inventoryService := service.NewInventoryService(inventoryRepo)
+	menuService := service.MenuService(menuRepo)
 
 	// Initialize handlers
 	orderHandler := handler.NewOrderHandler(orderService)
 	reportHandler := handler.NewReportHandler(reportService)
 	inventoryHandler := handler.NewInventoryHandler(inventoryService)
+	menuHandler := handler.MenuHandler(menuService)
 
 	// Create router
-	router := NewRouter(orderHandler, reportHandler, inventoryHandler)
+	router := NewRouter(orderHandler, reportHandler, inventoryHandler, menuHandler)
 
 	// Configure server
 	port := os.Getenv("PORT")
@@ -111,6 +114,7 @@ func NewRouter(
 	orderHandler *handler.OrderHandler,
 	reportHandler *handler.ReportHandler,
 	inventoryHanlder *handler.InventoryHandler,
+	menuHandler *handler.MenuHandler,
 ) http.Handler {
 	mux := http.NewServeMux()
 
@@ -132,6 +136,13 @@ func NewRouter(
 	mux.HandleFunc("PUT /inventory/{id}", inventoryHanlder.UpdateIngredient)
 	mux.HandleFunc("DELETE /inventory/{id}", inventoryHanlder.DeleteIngredient)
 	mux.HandleFunc("GET /inventory", inventoryHanlder.ListIngredients)
+
+	// Menu routes
+	mux.HandleFunc("POST /menu", menuHandler.CreateMenuItem)
+	mux.HandleFunc("GET /menu/{id}", menuHandler.GetMenuItem)
+	mux.HandleFunc("PUT /menu/{id}", menuHandler.UpdateMenuItem)
+	mux.HandleFunc("DELETE /menu/{id}", menuHandler.DeleteMenuItem)
+	mux.HandleFunc("GET /menu", menuHandler.ListMenuItems)
 
 	// Health check
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {

@@ -23,7 +23,7 @@ type menuRepository struct {
 	*Repository
 }
 
-func NewMenuRepository(db *sql.DB) *menuRepository {
+func NewMenuRepository(db *sql.DB) MenuRepository {
 	return &menuRepository{NewRepository(db)}
 }
 
