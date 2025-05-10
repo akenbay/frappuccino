@@ -21,26 +21,8 @@ func NewReportHandler(reportService service.ReportService) *ReportHandler {
 
 func (h *ReportHandler) GetTotalSales(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters
-	startDateStr := r.URL.Query().Get("start_date")
-	endDateStr := r.URL.Query().Get("end_date")
-
-	startDate, err := time.Parse(time.RFC3339, startDateStr)
-	if err != nil {
-		http.Error(w, "Invalid start_date format (use RFC3339)", http.StatusBadRequest)
-		return
-	}
-
-	endDate, err := time.Parse(time.RFC3339, endDateStr)
-	if err != nil {
-		http.Error(w, "Invalid end_date format (use RFC3339)", http.StatusBadRequest)
-		return
-	}
-
-	// Validate date range
-	if startDate.After(endDate) {
-		http.Error(w, "start_date must be before end_date", http.StatusBadRequest)
-		return
-	}
+	startDate := r.URL.Query().Get("start_date")
+	endDate := r.URL.Query().Get("end_date")
 
 	response, err := h.reportService.GetTotalSales(r.Context(), startDate, endDate)
 	if err != nil {

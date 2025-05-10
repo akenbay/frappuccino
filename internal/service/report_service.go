@@ -8,7 +8,7 @@ import (
 )
 
 type ReportService interface {
-	GetTotalSales(ctx context.Context, startDate, endDate time.Time) (*models.TotalSalesResponse, error)
+	GetTotalSales(ctx context.Context, startDate, endDate string) (*models.TotalSalesResponse, error)
 	GetPopularItems(ctx context.Context, limit int) ([]models.PopularItem, error)
 	GetOrderedItemsByPeriod(ctx context.Context, period string, month time.Month, year int) (*models.PeriodReportResponse, error)
 	Search(ctx context.Context, query string, filter string) (*models.SearchResult, error)
@@ -22,7 +22,7 @@ func NewReportService(repo dal.ReportRepository) ReportService {
 	return &reportService{repo: repo}
 }
 
-func (s *reportService) GetTotalSales(ctx context.Context, startDate, endDate time.Time) (*models.TotalSalesResponse, error) {
+func (s *reportService) GetTotalSales(ctx context.Context, startDate, endDate string) (*models.TotalSalesResponse, error) {
 	total, err := s.repo.GetTotalSales(ctx, startDate, endDate)
 	if err != nil {
 		return nil, err
@@ -30,8 +30,8 @@ func (s *reportService) GetTotalSales(ctx context.Context, startDate, endDate ti
 
 	return &models.TotalSalesResponse{
 		TotalSales: total,
-		StartDate:  startDate.Format(time.RFC3339),
-		EndDate:    endDate.Format(time.RFC3339),
+		StartDate:  startDate,
+		EndDate:    endDate,
 	}, nil
 }
 

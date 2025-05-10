@@ -5,11 +5,12 @@ import (
 	"database/sql"
 	"fmt"
 	"frappuccino/internal/models"
+	"strings"
 	"time"
 )
 
 type ReportRepository interface {
-	GetTotalSales(ctx context.Context, startDate, endDate time.Time) (float64, error)
+	GetTotalSales(ctx context.Context, startDate, endDate string) (float64, error)
 	GetPopularItems(ctx context.Context, limit int) ([]models.PopularItem, error)
 	GetOrderedItemsByPeriod(ctx context.Context, period string, month time.Month, year int) (models.PeriodReportResponse, error)
 	GetFullTextSearch(ctx context.Context, query string, filter string) (models.SearchResult, error)
@@ -23,15 +24,35 @@ func NewReportRepository(db *sql.DB) ReportRepository {
 	return &reportRepository{db: db}
 }
 
-func (r *reportRepository) GetTotalSales(ctx context.Context, startDate, endDate time.Time) (float64, error) {
+func (r *reportRepository) GetTotalSales(ctx context.Context, startDate, endDate string) (float64, error) {
 	query := `
-		SELECT COALESCE(SUM(total_price), 0)
-		FROM orders
-		WHERE created_at BETWEEN $1 AND $2
-	`
+        SELECT COALESCE(SUM(total_price), 0)
+        FROM orders
+    `
+
+	var args []interface{}
+	var whereClauses []string
+
+	// Handle start date if provided
+	if startDate != "" {
+		whereClauses = append(whereClauses, "created_at >= $1")
+		args = append(args, startDate)
+	}
+
+	// Handle end date if provided
+	if endDate != "" {
+		pos := len(args) + 1
+		whereClauses = append(whereClauses, fmt.Sprintf("created_at <= $%d", pos))
+		args = append(args, endDate)
+	}
+
+	// Add WHERE clause if we have any conditions
+	if len(whereClauses) > 0 {
+		query += " WHERE " + strings.Join(whereClauses, " AND ")
+	}
 
 	var totalSales float64
-	err := r.db.QueryRowContext(ctx, query, startDate, endDate).Scan(&totalSales)
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&totalSales)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get total sales: %w", err)
 	}
