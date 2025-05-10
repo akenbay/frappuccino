@@ -15,14 +15,14 @@ type InventoryRepository interface {
 	GetIngredientByID(ctx context.Context, id int) (models.Inventory, error)
 	UpdateIngredient(ctx context.Context, id int, ingredient models.Inventory) error
 	DeleteIngredient(ctx context.Context, id int) error
-	GetLeftOversWithPagination(sortBy string, page int, pageSize int) (models.PaginatedInventoryResponse, error)
+	GetLeftOversWithPagination(ctx context.Context, sortBy string, page int, pageSize int) (models.PaginatedInventoryResponse, error)
 }
 
 type inventoryRepository struct {
 	*Repository
 }
 
-func NewInventoryRepository(db *sql.DB) *inventoryRepository {
+func NewInventoryRepository(db *sql.DB) InventoryRepository {
 	return &inventoryRepository{NewRepository(db)}
 }
 

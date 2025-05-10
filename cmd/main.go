@@ -29,17 +29,20 @@ func main() {
 	// Initialize repositories
 	orderRepo := dal.NewOrderRepository(db)
 	reportRepo := dal.NewReportRepository(db)
+	inventoryRepo := dal.NewInventoryRepository(db)
 
 	// Initialize services
 	orderService := service.NewOrderService(orderRepo)
 	reportService := service.NewReportService(reportRepo)
+	inventoryService := service.NewInventoryService(inventoryRepo)
 
 	// Initialize handlers
 	orderHandler := handler.NewOrderHandler(orderService)
 	reportHandler := handler.NewReportHandler(reportService)
+	inventoryHandler := handler.NewInventoryHandler(inventoryService)
 
 	// Create router
-	router := NewRouter(orderHandler, reportHandler)
+	router := NewRouter(orderHandler, reportHandler, inventoryHandler)
 
 	// Configure server
 	port := os.Getenv("PORT")
@@ -107,6 +110,7 @@ func initDB() (*sql.DB, error) {
 func NewRouter(
 	orderHandler *handler.OrderHandler,
 	reportHandler *handler.ReportHandler,
+	inventoryHanlder *handler.InventoryHandler,
 ) http.Handler {
 	mux := http.NewServeMux()
 
@@ -115,12 +119,20 @@ func NewRouter(
 	handler = middleware.Recovery(handler)
 
 	// Order routes
-	mux.HandleFunc("POST /api/v1/orders", orderHandler.CreateOrder)
-	mux.HandleFunc("GET /api/v1/orders/{id}", orderHandler.GetOrder)
-	mux.HandleFunc("PUT /api/v1/orders/{id}", orderHandler.UpdateOrder)
-	mux.HandleFunc("DELETE /api/v1/orders/{id}", orderHandler.DeleteOrder)
-	mux.HandleFunc("POST /api/v1/orders/{id}/close", orderHandler.CloseOrder)
-	mux.HandleFunc("GET /api/v1/orders", orderHandler.ListOrders)
+	mux.HandleFunc("POST /orders", orderHandler.CreateOrder)
+	mux.HandleFunc("GET /orders/{id}", orderHandler.GetOrder)
+	mux.HandleFunc("PUT /orders/{id}", orderHandler.UpdateOrder)
+	mux.HandleFunc("DELETE /orders/{id}", orderHandler.DeleteOrder)
+	mux.HandleFunc("POST /orders/{id}/close", orderHandler.CloseOrder)
+	mux.HandleFunc("GET /orders", orderHandler.ListOrders)
+
+	// Inventory routes
+	mux.HandleFunc("POST /inventory", orderHandler.CreateOrder)
+	mux.HandleFunc("GET /orders/{id}", orderHandler.GetOrder)
+	mux.HandleFunc("PUT /orders/{id}", orderHandler.UpdateOrder)
+	mux.HandleFunc("DELETE /orders/{id}", orderHandler.DeleteOrder)
+	mux.HandleFunc("POST /orders/{id}/close", orderHandler.CloseOrder)
+	mux.HandleFunc("GET /orders", orderHandler.ListOrders)
 
 	// Health check
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
