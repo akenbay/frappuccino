@@ -58,6 +58,17 @@ CREATE TABLE inventory (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE customers (
+    id SERIAL PRIMARY KEY,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    phone TEXT UNIQUE,
+    email TEXT UNIQUE,
+    loyalty_points INTEGER DEFAULT 0,
+    preferences JSONB, -- e.g., {"favorite_drink": "latte", "milk_preference": "oat"}
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE menu_item_ingredients (
     menu_item_id INTEGER REFERENCES menu_items(id) ON DELETE CASCADE,
     ingredient_id INTEGER REFERENCES inventory(id) ON DELETE RESTRICT,
@@ -85,16 +96,7 @@ CREATE TABLE order_items (
     price_at_order DECIMAL(10,2) NOT NULL CHECK (price_at_order >= 0)
 );
 
-CREATE TABLE customers (
-    id SERIAL PRIMARY KEY,
-    first_name TEXT NOT NULL,
-    last_name TEXT NOT NULL,
-    phone TEXT UNIQUE,
-    email TEXT UNIQUE,
-    loyalty_points INTEGER DEFAULT 0,
-    preferences JSONB, -- e.g., {"favorite_drink": "latte", "milk_preference": "oat"}
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
+
 
 -- ========================
 -- 3. Create History Tables

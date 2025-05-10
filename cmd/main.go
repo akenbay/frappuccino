@@ -46,6 +46,7 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
+	port = "9090"
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%s", port),
@@ -81,19 +82,10 @@ func main() {
 }
 
 func initDB() (*sql.DB, error) {
-	// Read database configuration from environment variables
-	dbHost := os.Getenv("DB_HOST")
-	dbPort := os.Getenv("DB_PORT")
-	dbUser := os.Getenv("DB_USER")
-	dbPassword := os.Getenv("DB_PASSWORD")
-	dbName := os.Getenv("DB_NAME")
-
-	// Construct connection string
-	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		dbHost, dbPort, dbUser, dbPassword, dbName)
+	dbURL := os.Getenv("DATABASE_URL")
 
 	// Open database connection
-	db, err := sql.Open("postgres", connStr)
+	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
 	}
