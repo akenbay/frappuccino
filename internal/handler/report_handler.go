@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"frappuccino/internal/models"
@@ -58,32 +59,45 @@ func (h *ReportHandler) GetPopularItems(w http.ResponseWriter, r *http.Request) 
 
 func (h *ReportHandler) GetOrderedItemsByPeriod(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters
-	period := r.URL.Query().Get("period")
-	monthStr := r.URL.Query().Get("month")
+	period := strings.ToLower(r.URL.Query().Get("period"))
+	monthStr := strings.ToLower(r.URL.Query().Get("month"))
 	yearStr := r.URL.Query().Get("year")
 
 	// Validate period
-	if period != "daily" && period != "weekly" && period != "monthly" {
-		http.Error(w, "period must be one of: daily, weekly, monthly", http.StatusBadRequest)
+	validPeriods := map[string]bool{"day": true, "month": true}
+	if !validPeriods[period] {
+		http.Error(w, "period must be one of: day, month", http.StatusBadRequest)
 		return
 	}
 
-	// Parse month and year
+	// Parse month
 	var month time.Month
-	var year int
-	var err error
-
 	if monthStr != "" {
-		monthInt, err := strconv.Atoi(monthStr)
-		if err != nil || monthInt < 1 || monthInt > 12 {
-			http.Error(w, "month must be between 1 and 12", http.StatusBadRequest)
-			return
+		// Try to parse as number first
+		if monthInt, err := strconv.Atoi(monthStr); err == nil {
+			if monthInt < 1 || monthInt > 12 {
+				http.Error(w, "month must be between 1 and 12", http.StatusBadRequest)
+				return
+			}
+			month = time.Month(monthInt)
+		} else {
+			// Parse as month name
+			parsedMonth, err := parseMonthName(monthStr)
+			if err != nil {
+				http.Error(w, "month must be a valid month name or number (1-12)", http.StatusBadRequest)
+				return
+			}
+			month = parsedMonth
 		}
-		month = time.Month(monthInt)
 	} else {
-		month = time.Now().Month()
+		if period == "daily" || period == "weekly" {
+			month = time.Now().Month()
+		}
 	}
 
+	// Parse year
+	var year int
+	var err error
 	if yearStr != "" {
 		year, err = strconv.Atoi(yearStr)
 		if err != nil || year < 2000 || year > time.Now().Year() {
@@ -94,6 +108,12 @@ func (h *ReportHandler) GetOrderedItemsByPeriod(w http.ResponseWriter, r *http.R
 		year = time.Now().Year()
 	}
 
+	// Additional validation for monthly reports
+	if period == "monthly" && monthStr != "" {
+		http.Error(w, "month parameter should not be provided for monthly period reports", http.StatusBadRequest)
+		return
+	}
+
 	response, err := h.reportService.GetOrderedItemsByPeriod(r.Context(), period, month, year)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get period report: %v", err), http.StatusInternalServerError)
@@ -102,6 +122,30 @@ func (h *ReportHandler) GetOrderedItemsByPeriod(w http.ResponseWriter, r *http.R
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// Helper function to parse month names
+func parseMonthName(monthStr string) (time.Month, error) {
+	// Map of common month name formats
+	monthAbbreviations := map[string]time.Month{
+		"jan": time.January, "january": time.January,
+		"feb": time.February, "february": time.February,
+		"mar": time.March, "march": time.March,
+		"apr": time.April, "april": time.April,
+		"may": time.May,
+		"jun": time.June, "june": time.June,
+		"jul": time.July, "july": time.July,
+		"aug": time.August, "august": time.August,
+		"sep": time.September, "september": time.September,
+		"oct": time.October, "october": time.October,
+		"nov": time.November, "november": time.November,
+		"dec": time.December, "december": time.December,
+	}
+
+	if month, ok := monthAbbreviations[monthStr]; ok {
+		return month, nil
+	}
+	return 0, fmt.Errorf("invalid month name")
 }
 
 func (h *ReportHandler) Search(w http.ResponseWriter, r *http.Request) {

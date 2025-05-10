@@ -133,7 +133,7 @@ func NewRouter(
 	mux.HandleFunc("GET /orders/numberOfOrderedItems", orderHandler.GetOrderedItemsReport) //works
 
 	// Report routes
-	mux.HandleFunc("GET /reports/orderedItemsByPeriod", reportHandler.GetOrderedItemsByPeriod)
+	mux.HandleFunc("GET /reports/orderedItemsByPeriod", reportHandler.GetOrderedItemsByPeriod) //works
 	mux.HandleFunc("GET /reports/search", reportHandler.Search)
 	mux.HandleFunc("GET /reports/total-sales", reportHandler.GetTotalSales)     //works
 	mux.HandleFunc("GET /reports/popular-items", reportHandler.GetPopularItems) //works
