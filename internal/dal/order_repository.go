@@ -6,10 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"frappuccino/internal/models"
 	"strings"
 	"time"
-
-	"frappuccino/internal/models"
 )
 
 type OrderRepository interface {
@@ -142,6 +141,7 @@ func (r *orderRepository) GetOrderByID(ctx context.Context, id int) (models.Orde
 	var order models.Order
 
 	// 1. Get basic order info
+	var specialInstructions sql.NullString
 	err := r.db.QueryRowContext(ctx, `
         SELECT 
             id, 
@@ -159,16 +159,21 @@ func (r *orderRepository) GetOrderByID(ctx context.Context, id int) (models.Orde
 		&order.Status,
 		&order.PaymentMethod,
 		&order.TotalPrice,
-		&order.SpecialInstructions,
+		&specialInstructions,
 		&order.CreatedAt,
 		&order.UpdatedAt,
 	)
-
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return models.Order{}, fmt.Errorf("order not found: %w", err)
 		}
 		return models.Order{}, fmt.Errorf("failed to get order: %w", err)
+	}
+
+	if specialInstructions.Valid {
+		order.SpecialInstructions = json.RawMessage(specialInstructions.String)
+	} else {
+		order.SpecialInstructions = nil
 	}
 
 	// 2. Get order items
@@ -186,6 +191,7 @@ func (r *orderRepository) GetOrderByID(ctx context.Context, id int) (models.Orde
 	}
 	defer rows.Close()
 
+	var customizations sql.NullString
 	var items []models.OrderItem
 	for rows.Next() {
 		var item models.OrderItem
@@ -194,10 +200,17 @@ func (r *orderRepository) GetOrderByID(ctx context.Context, id int) (models.Orde
 			&item.MenuItemID,
 			&item.Quantity,
 			&item.PriceAtOrder,
-			&item.Customizations,
+			&customizations,
 		); err != nil {
 			return models.Order{}, fmt.Errorf("failed to scan order item: %w", err)
 		}
+
+		if customizations.Valid {
+			item.Customizations = json.RawMessage(customizations.String)
+		} else {
+			item.Customizations = nil
+		}
+
 		items = append(items, item)
 	}
 

@@ -1,19 +1,29 @@
+# Используем официальный образ Golang
 FROM golang:1.22 AS builder
 
+# Устанавливаем рабочую директорию внутри контейнера
 WORKDIR /app
+
+# Копируем go.mod и go.sum и устанавливаем зависимости (это ускоряет сборку)
 COPY go.mod go.sum ./
 RUN go mod download
+
+# Копируем все исходники в контейнер
 COPY . .
 
-# Build the application (adjust path if needed)
-RUN CGO_ENABLED=0 GOOS=linux go build -o /frappuccino ./cmd
+# Собираем бинарный файл
+RUN go build -o frappuccino ./cmd/main.go
 
-# Final stage
-FROM alpine:latest
-WORKDIR /
+# Используем минимальный образ для финального контейнера
+FROM debian:bookworm-slim
 
-# Copy the binary from builder
-COPY --from=builder /frappuccino /frappuccino
+WORKDIR /app
 
+# Копируем бинарник из builder-контейнера
+COPY --from=builder /app/frappuccino /app/frappuccino
+
+# Открываем порт
 EXPOSE 8080
-ENTRYPOINT ["/frappuccino"]
+
+# Запускаем приложение
+CMD ["/app/frappuccino"]
