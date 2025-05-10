@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"frappuccino/internal/models"
 	"strings"
-	"time"
 )
 
 type OrderRepository interface {
@@ -18,7 +17,7 @@ type OrderRepository interface {
 	UpdateOrder(ctx context.Context, id int, order models.Order) error
 	DeleteOrder(ctx context.Context, id int) error
 	CloseOrder(ctx context.Context, id int) error
-	GetNumberOfOrderedItems(ctx context.Context, startDate, endDate time.Time) (map[string]int, error)
+	GetNumberOfOrderedItems(ctx context.Context, startDate, endDate string) (map[string]int, error)
 	BatchProcessOrders(ctx context.Context, orders []models.Order) (models.BatchOrderResponse, error)
 }
 
@@ -705,13 +704,22 @@ func (r *orderRepository) GetAllOrders(ctx context.Context, filters models.Order
 	return orders, nil
 }
 
-func (r *orderRepository) GetNumberOfOrderedItems(ctx context.Context, startDate, endDate time.Time) (map[string]int, error) {
+func (r *orderRepository) GetNumberOfOrderedItems(ctx context.Context, startDate, endDate string) (map[string]int, error) {
 	query := `
 		SELECT mi.name, SUM(oi.quantity) as total_quantity
 		FROM order_items oi
 		JOIN menu_items mi ON oi.menu_item_id = mi.id
 		JOIN orders o ON oi.order_id = o.id
+	`
+
+	if startDate != "" && endDate != "" {
+		query += `
 		WHERE o.created_at BETWEEN $1 AND $2
+	`
+	} else if startDate == "" && endDate != "" {
+	}
+
+	query += `
 		GROUP BY mi.name
 		ORDER BY total_quantity DESC
 	`

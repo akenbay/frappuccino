@@ -4,7 +4,6 @@ import (
 	"context"
 	"frappuccino/internal/dal"
 	"frappuccino/internal/models"
-	"time"
 )
 
 type OrderService interface {
@@ -14,7 +13,7 @@ type OrderService interface {
 	UpdateOrder(ctx context.Context, id int, order models.Order) error
 	DeleteOrder(ctx context.Context, id int) error
 	CloseOrder(ctx context.Context, id int) error
-	GetOrderedItemsReport(ctx context.Context, startDate, endDate time.Time) (map[string]int, error)
+	GetOrderedItemsReport(ctx context.Context, startDate, endDate string) (map[string]int, error)
 	ProcessBatchOrders(ctx context.Context, orders []models.Order) (models.BatchOrderResponse, error)
 }
 
@@ -87,15 +86,7 @@ func (s *orderService) CloseOrder(ctx context.Context, id int) error {
 	return s.orderRepo.CloseOrder(ctx, id)
 }
 
-func (s *orderService) GetOrderedItemsReport(ctx context.Context, startDate, endDate time.Time) (map[string]int, error) {
-	// Validate date range
-	if startDate.IsZero() || endDate.IsZero() {
-		return nil, models.ErrInvalidDateRange
-	}
-	if startDate.After(endDate) {
-		return nil, models.ErrInvalidDateRange
-	}
-
+func (s *orderService) GetOrderedItemsReport(ctx context.Context, startDate, endDate string) (map[string]int, error) {
 	return s.orderRepo.GetNumberOfOrderedItems(ctx, startDate, endDate)
 }
 

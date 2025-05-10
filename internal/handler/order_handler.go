@@ -192,20 +192,8 @@ func (h *OrderHandler) CloseOrder(w http.ResponseWriter, r *http.Request) {
 
 func (h *OrderHandler) GetOrderedItemsReport(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters
-	startDateStr := r.URL.Query().Get("start_date")
-	endDateStr := r.URL.Query().Get("end_date")
-
-	startDate, err := time.Parse(time.RFC3339, startDateStr)
-	if err != nil {
-		http.Error(w, "Invalid start_date format (use RFC3339)", http.StatusBadRequest)
-		return
-	}
-
-	endDate, err := time.Parse(time.RFC3339, endDateStr)
-	if err != nil {
-		http.Error(w, "Invalid end_date format (use RFC3339)", http.StatusBadRequest)
-		return
-	}
+	startDate := r.URL.Query().Get("start_date")
+	endDate := r.URL.Query().Get("end_date")
 
 	report, err := h.orderService.GetOrderedItemsReport(r.Context(), startDate, endDate)
 	if err != nil {

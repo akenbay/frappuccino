@@ -125,6 +125,8 @@ func NewRouter(
 	mux.HandleFunc("DELETE /orders/{id}", orderHandler.DeleteOrder)
 	mux.HandleFunc("POST /orders/{id}/close", orderHandler.CloseOrder)
 	mux.HandleFunc("GET /orders", orderHandler.ListOrders)
+	mux.HandleFunc("POST /orders/batch-process", orderHandler.ProcessBatchOrders)
+	mux.HandleFunc("GET /orders/numberOfOrderedItems", orderHandler.GetOrderedItemsReport)
 
 	// Inventory routes
 	mux.HandleFunc("POST /inventory", inventoryHanlder.CreateIngredient)
