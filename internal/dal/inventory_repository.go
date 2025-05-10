@@ -91,7 +91,6 @@ func (r *inventoryRepository) GetIngredientByID(ctx context.Context, id int) (mo
 		&ingredient.Name,
 		&ingredient.Quantity,
 		&ingredient.Unit,
-		&ingredient.CostPerUnit,
 		&ingredient.ReOrderLevel,
 		&ingredient.SupplierInfo,
 		&ingredient.CreatedAt,
