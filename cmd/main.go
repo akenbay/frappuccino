@@ -127,12 +127,11 @@ func NewRouter(
 	mux.HandleFunc("GET /orders", orderHandler.ListOrders)
 
 	// Inventory routes
-	mux.HandleFunc("POST /inventory", orderHandler.CreateOrder)
-	mux.HandleFunc("GET /orders/{id}", orderHandler.GetOrder)
-	mux.HandleFunc("PUT /orders/{id}", orderHandler.UpdateOrder)
-	mux.HandleFunc("DELETE /orders/{id}", orderHandler.DeleteOrder)
-	mux.HandleFunc("POST /orders/{id}/close", orderHandler.CloseOrder)
-	mux.HandleFunc("GET /orders", orderHandler.ListOrders)
+	mux.HandleFunc("POST /inventory", inventoryHanlder.CreateIngredient)
+	mux.HandleFunc("GET /inventory/{id}", inventoryHanlder.GetIngredient)
+	mux.HandleFunc("PUT /inventory/{id}", inventoryHanlder.UpdateIngredient)
+	mux.HandleFunc("DELETE /inventory/{id}", inventoryHanlder.DeleteIngredient)
+	mux.HandleFunc("GET /inventory", inventoryHanlder.ListIngredients)
 
 	// Health check
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
