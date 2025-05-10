@@ -5,15 +5,15 @@ import (
 )
 
 type MenuItems struct {
-	ID          int         `json:"id"`
-	Name        string      `json:"name"`
-	Description string      `json:"description,omitempty"`
-	Price       float64     `json:"price"`
-	Category    []string    `json:"category,omitempty"`
-	IsActive    bool        `json:"is_active"`
-	Ingredients []Inventory `json:"ingredients"`
-	CreatedAt   time.Time   `json:"created_at"`
-	UpdatedAt   time.Time   `json:"updated_at"`
+	ID          int                   `json:"id"`
+	Name        string                `json:"name"`
+	Description string                `json:"description,omitempty"`
+	Price       float64               `json:"price"`
+	Category    []string              `json:"category,omitempty"`
+	IsActive    bool                  `json:"is_active"`
+	Ingredients []MenuItemIngredients `json:"ingredients"`
+	CreatedAt   time.Time             `json:"created_at"`
+	UpdatedAt   time.Time             `json:"updated_at"`
 }
 
 type PriceHistory struct {
@@ -24,8 +24,7 @@ type PriceHistory struct {
 	ChangedAt  time.Time `json:"updated_at"`
 }
 
-type MenuItemIngridients struct {
-	MenuItemID   int     `json:"menu_item_id"`
+type MenuItemIngredients struct {
 	IngredientID int     `json:"ingredient_id"`
 	Quantity     float64 `json:"quantity"`
 }
