@@ -54,7 +54,7 @@ CREATE TABLE inventory (
     cost_per_unit DECIMAL(10,2),
     reorder_level DECIMAL(10,3),
     supplier_info JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
