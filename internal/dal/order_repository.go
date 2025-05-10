@@ -664,6 +664,7 @@ func (r *orderRepository) GetAllOrders(ctx context.Context, filters models.Order
 	defer rows.Close()
 
 	var orders []models.Order
+	var specialInstructions sql.NullString
 	for rows.Next() {
 		var order models.Order
 		var itemsJSON []byte
@@ -674,13 +675,19 @@ func (r *orderRepository) GetAllOrders(ctx context.Context, filters models.Order
 			&order.Status,
 			&order.PaymentMethod,
 			&order.TotalPrice,
-			&order.SpecialInstructions,
+			&specialInstructions,
 			&order.CreatedAt,
 			&order.UpdatedAt,
 			&itemsJSON,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan order: %w", err)
+		}
+
+		if specialInstructions.Valid {
+			order.SpecialInstructions = json.RawMessage(specialInstructions.String)
+		} else {
+			order.SpecialInstructions = nil
 		}
 
 		// Unmarshal JSON items
