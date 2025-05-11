@@ -23,13 +23,15 @@ CREATE TYPE unit_type AS ENUM (
 CREATE TYPE payment_method AS ENUM (
     'cash',
     'credit_card',
-    'mobile_payment'
+    'mobile_payment',
+    ''
 );
 
 CREATE TYPE transaction_type AS ENUM (
     'order_usage',
     'order_deletion',
-    'adjustment'
+    'adjustment',
+    'order_update'
 );
 
 -- ========================

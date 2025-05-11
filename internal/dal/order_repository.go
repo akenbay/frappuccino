@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"frappuccino/internal/models"
 	"strings"
+
+	"github.com/lib/pq"
 )
 
 type OrderRepository interface {
@@ -616,7 +618,8 @@ func (r *orderRepository) GetAllOrders(ctx context.Context, filters models.Order
                         'menu_item_id', oi.menu_item_id,
                         'quantity', oi.quantity,
                         'price_at_order', oi.price_at_order,
-                        'customizations', oi.customizations
+                        'customizations', oi.customizations,
+						'order_id', oi.order_id
                     )
                 ) FILTER (WHERE oi.id IS NOT NULL),
                 '[]'
@@ -664,6 +667,7 @@ func (r *orderRepository) GetAllOrders(ctx context.Context, filters models.Order
 
 	var orders []models.Order
 	var specialInstructions sql.NullString
+	var paymentMethod sql.NullString
 	for rows.Next() {
 		var order models.Order
 		var itemsJSON []byte
@@ -672,7 +676,7 @@ func (r *orderRepository) GetAllOrders(ctx context.Context, filters models.Order
 			&order.ID,
 			&order.CustomerID,
 			&order.Status,
-			&order.PaymentMethod,
+			&paymentMethod,
 			&order.TotalPrice,
 			&specialInstructions,
 			&order.CreatedAt,
@@ -687,6 +691,12 @@ func (r *orderRepository) GetAllOrders(ctx context.Context, filters models.Order
 			order.SpecialInstructions = json.RawMessage(specialInstructions.String)
 		} else {
 			order.SpecialInstructions = nil
+		}
+
+		if paymentMethod.Valid {
+			order.PaymentMethod = paymentMethod.String
+		} else {
+			order.PaymentMethod = ""
 		}
 
 		// Unmarshal JSON items
@@ -760,7 +770,6 @@ func (r *orderRepository) GetNumberOfOrderedItems(ctx context.Context, startDate
 }
 
 func (r *orderRepository) BatchProcessOrders(ctx context.Context, orders []models.Order) (models.BatchOrderResponse, error) {
-	// Validate input first
 	if len(orders) == 0 {
 		return models.BatchOrderResponse{}, models.ErrEmptyBatch
 	}
@@ -772,31 +781,30 @@ func (r *orderRepository) BatchProcessOrders(ctx context.Context, orders []model
 		},
 	}
 
-	// Process orders one by one
+	// Map to track actual ingredient usage across all orders
+	actualInventoryUsed := make(map[int]float64) // ingredientID -> quantity used
+
 	for _, order := range orders {
-
-		// First get customer details
-		var firstName, lastName string
+		// Get customer name
+		var customerName string
 		err := r.db.QueryRowContext(ctx, `
-            SELECT first_name, last_name FROM customers WHERE id = $1`,
-			order.CustomerID).Scan(&firstName, &lastName)
-
+            SELECT CONCAT(first_name, ' ', last_name) 
+            FROM customers WHERE id = $1`, order.CustomerID).Scan(&customerName)
 		if err != nil {
-			return models.BatchOrderResponse{}, fmt.Errorf("failed to get customer's name: %v", err)
+			customerName = "Unknown Customer"
 		}
 
 		order.TotalPrice, err = r.calculateOrderTotal(ctx, order.Items)
 
 		if err != nil {
-			return models.BatchOrderResponse{}, fmt.Errorf("failed to calculate total price of the order: %v", err)
+			return models.BatchOrderResponse{}, fmt.Errorf("failed to calculate total price of the ordered item: %w", err)
 		}
 
 		processed := models.ProcessedOrder{
-			CustomerName: fmt.Sprintf("%s %s", firstName, lastName),
+			CustomerName: customerName,
 			Total:        order.TotalPrice,
 		}
 
-		// Validate each order before processing
 		if len(order.Items) == 0 {
 			processed.Status = "rejected"
 			processed.Rejected = true
@@ -806,7 +814,7 @@ func (r *orderRepository) BatchProcessOrders(ctx context.Context, orders []model
 			continue
 		}
 
-		// Use the existing CreateOrder function
+		// Process order and track actual ingredient usage
 		orderID, err := r.CreateOrder(ctx, order)
 		if err != nil {
 			processed.Status = "rejected"
@@ -818,47 +826,54 @@ func (r *orderRepository) BatchProcessOrders(ctx context.Context, orders []model
 			processed.Status = "accepted"
 			response.Summary.Accepted++
 			response.Summary.TotalRevenue += order.TotalPrice
+
+			// Get actual ingredient usage for this order from inventory_transactions
+			rows, err := r.db.QueryContext(ctx, `
+                SELECT ingredient_id, ABS(delta) as used 
+                FROM inventory_transactions 
+                WHERE reference_id = $1 AND transaction_type = 'order_usage'`,
+				orderID)
+			if err == nil {
+				defer rows.Close()
+				for rows.Next() {
+					var ingredientID int
+					var used float64
+					if err := rows.Scan(&ingredientID, &used); err == nil {
+						actualInventoryUsed[ingredientID] += used
+					}
+				}
+			}
 		}
 
 		response.ProcessedOrders = append(response.ProcessedOrders, processed)
 	}
 
-	// Generate inventory report after all orders are processed
-	inventoryReport, err := r.generateInventoryReport(ctx)
-	if err != nil {
-		// We still return the order processing results, just log the inventory error
+	// Generate inventory report only for actually used ingredients
+	if len(actualInventoryUsed) > 0 {
+		// Convert map keys to slice for SQL IN clause
+		ingredientIDs := make([]int, 0, len(actualInventoryUsed))
+		for id := range actualInventoryUsed {
+			ingredientIDs = append(ingredientIDs, id)
+		}
 
-		return models.BatchOrderResponse{}, fmt.Errorf("failed to generate inventory report: %v", err)
-	} else {
-		response.Summary.InventoryUsed = inventoryReport
+		rows, err := r.db.QueryContext(ctx, `
+            SELECT i.id, i.name, i.quantity 
+            FROM inventory i
+            WHERE i.id = ANY($1)`, pq.Array(ingredientIDs))
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var ingredient models.InventoryUsage
+				if err := rows.Scan(&ingredient.IngredientID, &ingredient.Name, &ingredient.RemainingStock); err == nil {
+					ingredient.QuantityUsed = actualInventoryUsed[ingredient.IngredientID]
+					response.Summary.InventoryUsed = append(response.Summary.InventoryUsed, ingredient)
+				}
+			}
+		}
 	}
 
 	response.Summary.TotalOrders = len(orders)
 	return response, nil
-}
-
-func (r *orderRepository) generateInventoryReport(ctx context.Context) ([]models.InventoryUsage, error) {
-	rows, err := r.db.QueryContext(ctx, `
-        SELECT id, name, quantity FROM inventory`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query inventory: %w", err)
-	}
-	defer rows.Close()
-
-	var report []models.InventoryUsage
-	for rows.Next() {
-		var item models.InventoryUsage
-		if err := rows.Scan(&item.IngredientID, &item.Name, &item.RemainingStock); err != nil {
-			return nil, fmt.Errorf("failed to scan inventory row: %w", err)
-		}
-		report = append(report, item)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error reading inventory rows: %w", err)
-	}
-
-	return report, nil
 }
 
 func (r *orderRepository) calculateOrderTotal(ctx context.Context, items []models.OrderItem) (float64, error) {
