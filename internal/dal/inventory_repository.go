@@ -40,7 +40,7 @@ func (r *inventoryRepository) CreateIngredient(ctx context.Context, ingredient m
 	).Scan(&id)
 
 	if err != nil {
-		return 0, fmt.Errorf("failed to create ingredient: %w", err)
+		return 0, err
 	}
 
 	return id, nil
@@ -148,7 +148,7 @@ func (r *inventoryRepository) UpdateIngredient(ctx context.Context, id int, ingr
 		id,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to update ingredient: %w", err)
+		return err
 	}
 
 	// Verify exactly one row was updated
@@ -211,8 +211,6 @@ func (r *inventoryRepository) GetLeftOversWithPagination(ctx context.Context, so
 		orderBy = "cost_per_unit DESC"
 	case "quantity":
 		orderBy = "quantity ASC"
-	default:
-		orderBy = "name ASC"
 	}
 
 	// Get total count of items with positive quantity

@@ -25,7 +25,13 @@ func NewInventoryService(inventoryRepo dal.InventoryRepository) InventoryService
 
 func (s *inventoryService) CreateIngredient(ctx context.Context, ingredient models.Inventory) (int, error) {
 	if ingredient.Quantity < 0 {
-		return 0, models.ErrInvalidNumberRange
+		return 0, models.ErrInvalidQuantity
+	}
+	if ingredient.CostPerUnit < 0 {
+		return 0, models.ErrInvalidCostPerUnit
+	}
+	if ingredient.ReOrderLevel < 0 {
+		return 0, models.ErrInvalidReOrderLevel
 	}
 	return s.inventoryRepo.CreateIngredient(ctx, ingredient)
 }
@@ -46,7 +52,13 @@ func (s *inventoryService) UpdateIngredient(ctx context.Context, id int, ingredi
 		return models.ErrInvalidOrderID
 	}
 	if ingredient.Quantity < 0 {
-		return models.ErrInvalidNumberRange
+		return models.ErrInvalidQuantity
+	}
+	if ingredient.CostPerUnit < 0 {
+		return models.ErrInvalidCostPerUnit
+	}
+	if ingredient.ReOrderLevel < 0 {
+		return models.ErrInvalidReOrderLevel
 	}
 	return s.inventoryRepo.UpdateIngredient(ctx, id, ingredient)
 }
@@ -59,6 +71,9 @@ func (s *inventoryService) DeleteIngredient(ctx context.Context, id int) error {
 }
 
 func (s *inventoryService) GetLeftOversWithPagination(ctx context.Context, sortBy string, page int, pageSize int) (models.PaginatedInventoryResponse, error) {
+	if !(sortBy == "price" || sortBy == "quantity") {
+		return models.PaginatedInventoryResponse{}, models.ErrInvalidSortByValue
+	}
 	if pageSize <= 0 {
 		return models.PaginatedInventoryResponse{}, models.ErrInvalidPageSize
 	}

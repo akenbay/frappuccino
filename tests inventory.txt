@@ -1,0 +1,492 @@
+Inventory
+GET http://localhost:9090/inventory
+[
+    {
+        "id": 1,
+        "name": "Espresso Beans",
+        "quantity": 5000,
+        "unit": "g",
+        "cost_per_unit": 0.02,
+        "reorder_level": 1000,
+        "supplier_info": {
+            "contact": "555-1001",
+            "supplier": "Bean Co"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 2,
+        "name": "Arabica Beans",
+        "quantity": 3000,
+        "unit": "g",
+        "cost_per_unit": 0.03,
+        "reorder_level": 1500,
+        "supplier_info": {
+            "contact": "555-1002",
+            "supplier": "Premium Beans"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 3,
+        "name": "Robusta Beans",
+        "quantity": 4000,
+        "unit": "g",
+        "cost_per_unit": 0.03,
+        "reorder_level": 1200,
+        "supplier_info": {
+            "contact": "555-1001",
+            "supplier": "Bean Co"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 4,
+        "name": "Milk",
+        "quantity": 20000,
+        "unit": "ml",
+        "cost_per_unit": 0.01,
+        "reorder_level": 5000,
+        "supplier_info": {
+            "contact": "555-2001",
+            "supplier": "Dairy Farms"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 5,
+        "name": "Oat Milk",
+        "quantity": 15000,
+        "unit": "ml",
+        "cost_per_unit": 0.02,
+        "reorder_level": 4000,
+        "supplier_info": {
+            "contact": "555-2002",
+            "supplier": "Plant Co"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 6,
+        "name": "Almond Milk",
+        "quantity": 10000,
+        "unit": "ml",
+        "cost_per_unit": 0.02,
+        "reorder_level": 3000,
+        "supplier_info": {
+            "contact": "555-2002",
+            "supplier": "Plant Co"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 7,
+        "name": "Sugar",
+        "quantity": 10000,
+        "unit": "g",
+        "cost_per_unit": 0.01,
+        "reorder_level": 2000,
+        "supplier_info": {
+            "contact": "555-3001",
+            "supplier": "Sweet Inc"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 8,
+        "name": "Brown Sugar",
+        "quantity": 8000,
+        "unit": "g",
+        "cost_per_unit": 0.01,
+        "reorder_level": 1500,
+        "supplier_info": {
+            "contact": "555-3001",
+            "supplier": "Sweet Inc"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 9,
+        "name": "Chocolate Syrup",
+        "quantity": 5000,
+        "unit": "ml",
+        "cost_per_unit": 0.03,
+        "reorder_level": 1000,
+        "supplier_info": {
+            "contact": "555-4001",
+            "supplier": "Choc Co"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 10,
+        "name": "Caramel Syrup",
+        "quantity": 4500,
+        "unit": "ml",
+        "cost_per_unit": 0.03,
+        "reorder_level": 1000,
+        "supplier_info": {
+            "contact": "555-3001",
+            "supplier": "Sweet Inc"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 11,
+        "name": "Vanilla Extract",
+        "quantity": 1000,
+        "unit": "ml",
+        "cost_per_unit": 0.15,
+        "reorder_level": 200,
+        "supplier_info": {
+            "contact": "555-5001",
+            "supplier": "Flavor Co"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 12,
+        "name": "Cinnamon Powder",
+        "quantity": 2000,
+        "unit": "g",
+        "cost_per_unit": 0.08,
+        "reorder_level": 500,
+        "supplier_info": {
+            "contact": "555-6001",
+            "supplier": "Spice World"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 13,
+        "name": "Whipped Cream",
+        "quantity": 3000,
+        "unit": "ml",
+        "cost_per_unit": 0.04,
+        "reorder_level": 800,
+        "supplier_info": {
+            "contact": "555-2001",
+            "supplier": "Dairy Farms"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 14,
+        "name": "Ice Cubes",
+        "quantity": 50000,
+        "unit": "items",
+        "reorder_level": 10000,
+        "supplier_info": {
+            "contact": "555-7001",
+            "supplier": "Ice Co"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 15,
+        "name": "Paper Cups (12oz)",
+        "quantity": 1000,
+        "unit": "items",
+        "cost_per_unit": 0.05,
+        "reorder_level": 300,
+        "supplier_info": {
+            "contact": "555-8001",
+            "supplier": "Packaging Co"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 16,
+        "name": "Lids",
+        "quantity": 1200,
+        "unit": "items",
+        "cost_per_unit": 0.03,
+        "reorder_level": 400,
+        "supplier_info": {
+            "contact": "555-8001",
+            "supplier": "Packaging Co"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 17,
+        "name": "Straws",
+        "quantity": 2000,
+        "unit": "items",
+        "cost_per_unit": 0.01,
+        "reorder_level": 500,
+        "supplier_info": {
+            "contact": "555-8001",
+            "supplier": "Packaging Co"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 18,
+        "name": "Coffee Filters",
+        "quantity": 500,
+        "unit": "items",
+        "cost_per_unit": 0.02,
+        "reorder_level": 100,
+        "supplier_info": {
+            "contact": "555-9001",
+            "supplier": "Brew Co"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 19,
+        "name": "Chocolate Chips",
+        "quantity": 2500,
+        "unit": "g",
+        "cost_per_unit": 0.07,
+        "reorder_level": 500,
+        "supplier_info": {
+            "contact": "555-4001",
+            "supplier": "Choc Co"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-10T18:24:42.884518Z"
+    },
+    {
+        "id": 20,
+        "name": "Biscotti",
+        "quantity": 200,
+        "unit": "items",
+        "cost_per_unit": 0.5,
+        "reorder_level": 50,
+        "supplier_info": {
+            "contact": "555-10001",
+            "supplier": "Bakery Co"
+        },
+        "created_at": "2025-05-10T18:24:42.884518Z",
+        "updated_at": "2025-05-11T10:21:17.012827Z"
+    },
+    {
+        "id": 22,
+        "name": "Bisquit",
+        "quantity": 200,
+        "unit": "items",
+        "cost_per_unit": 0.5,
+        "reorder_level": 10,
+        "supplier_info": {
+            "contact": "555-10001",
+            "supplier": "Bakery Co"
+        },
+        "created_at": "2025-05-11T10:22:15.706932Z",
+        "updated_at": "2025-05-11T10:22:15.706932Z"
+    },
+    {
+        "id": 23,
+        "name": "Chocolate Bisquit",
+        "quantity": 200,
+        "unit": "items",
+        "cost_per_unit": 0.5,
+        "reorder_level": 10,
+        "supplier_info": {
+            "contact": "555-10001",
+            "supplier": "Bakery Co"
+        },
+        "created_at": "2025-05-11T10:29:15.452005Z",
+        "updated_at": "2025-05-11T10:29:15.452005Z"
+    }
+]
+
+GET http://localhost:9090/inventory/12
+{
+    "id": 12,
+    "name": "Cinnamon Powder",
+    "quantity": 2000,
+    "unit": "g",
+    "cost_per_unit": 0.08,
+    "reorder_level": 500,
+    "supplier_info": {
+        "contact": "555-6001",
+        "supplier": "Spice World"
+    },
+    "created_at": "2025-05-10T18:24:42.884518Z",
+    "updated_at": "2025-05-10T18:24:42.884518Z"
+}
+
+GET http://localhost:9090/inventory/-12
+Invalid ingredient ID
+
+GET http://localhost:9090/inventory/getLeftOvers?sortBy=price&page=1&pageSize=4
+{
+    "items": [
+        {
+            "id": 23,
+            "name": "Chocolate Bisquit",
+            "quantity": 200,
+            "unit": "items",
+            "cost_per_unit": 0.5
+        },
+        {
+            "id": 20,
+            "name": "Biscotti",
+            "quantity": 200,
+            "unit": "items",
+            "cost_per_unit": 0.5
+        },
+        {
+            "id": 22,
+            "name": "Bisquit",
+            "quantity": 200,
+            "unit": "items",
+            "cost_per_unit": 0.5
+        },
+        {
+            "id": 11,
+            "name": "Vanilla Extract",
+            "quantity": 1000,
+            "unit": "ml",
+            "cost_per_unit": 0.15
+        }
+    ],
+    "total_count": 22,
+    "current_page": 1,
+    "page_size": 4,
+    "total_pages": 6,
+    "has_next": true
+}
+
+POST http://localhost:9090/inventory
+Succesful
+{
+    "name": "Chocolate Bisquit",
+    "quantity": 200,
+    "unit": "items",
+    "cost_per_unit": 0.5,
+    "reorder_level": 10,
+    "supplier_info": {
+        "contact": "555-10001",
+        "supplier": "Bakery Co"
+    }
+}
+{
+    "id": 24,
+    "message": "Ingredient created successfully"
+}
+
+Negative values
+{
+    "name": "Chocolate Bisquit",
+    "quantity": -200,
+    "unit": "items",
+    "cost_per_unit": 0.5,
+    "reorder_level": 10,
+    "supplier_info": {
+        "contact": "555-10001",
+        "supplier": "Bakery Co"
+    }
+}
+Failed to create ingredient: quantity can not be assigned to negative value
+
+{
+    "name": "Chocolate Bisquit",
+    "quantity": 200,
+    "unit": "items",
+    "cost_per_unit": -0.5,
+    "reorder_level": 10,
+    "supplier_info": {
+        "contact": "555-10001",
+        "supplier": "Bakery Co"
+    }
+}
+Failed to create ingredient: cost per unit can not be assigned to negative value
+
+{
+    "name": "Chocolate Bisquit",
+    "quantity": 200,
+    "unit": "items",
+    "cost_per_unit": 0.5,
+    "reorder_level": -10,
+    "supplier_info": {
+        "contact": "555-10001",
+        "supplier": "Bakery Co"
+    }
+}
+Failed to create ingredient: reorder level can not be assigned to negative value
+
+PUT http://localhost:9090/inventory/24
+Succesful
+{
+    "name": "Chocolate Bisquit",
+    "quantity": 200,
+    "unit": "items",
+    "cost_per_unit": 0.5,
+    "reorder_level": 10,
+    "supplier_info": {
+        "contact": "555-10001",
+        "supplier": "Bakery Co"
+    }
+}
+{
+    "message": "Ingredient updated successfully"
+}
+
+Negative values
+{
+    "name": "Chocolate Bisquit",
+    "quantity": -200,
+    "unit": "items",
+    "cost_per_unit": 0.5,
+    "reorder_level": 10,
+    "supplier_info": {
+        "contact": "555-10001",
+        "supplier": "Bakery Co"
+    }
+}
+Failed to update ingredient: quantity can not be assigned to negative value
+
+{
+    "name": "Chocolate Bisquit",
+    "quantity": 200,
+    "unit": "items",
+    "cost_per_unit": -0.5,
+    "reorder_level": 10,
+    "supplier_info": {
+        "contact": "555-10001",
+        "supplier": "Bakery Co"
+    }
+}
+Failed to update ingredient: cost per unit can not be assigned to negative value
+
+{
+    "name": "Chocolate Bisquit",
+    "quantity": 200,
+    "unit": "items",
+    "cost_per_unit": 0.5,
+    "reorder_level": -10,
+    "supplier_info": {
+        "contact": "555-10001",
+        "supplier": "Bakery Co"
+    }
+}
+Failed to update ingredient: reorder level can not be assigned to negative value
+
+DELETE http://localhost:9090/inventory/24
+{
+    "message": "Ingredient deleted successfully"
+}
+
+DELETE http://localhost:9090/inventory/25
+Failed to delete ingredient: sql: no rows in result set
