@@ -1,0 +1,64 @@
+http://localhost:9090/orders/batch-process
+
+{
+  "orders": [
+    {
+      "customer_id": 1,
+      "items": [
+        {
+          "menu_item_id": 2,
+          "quantity": 2,
+          "customizations": {
+            "milk": "oat",
+            "size": "large"
+          }
+        },
+        {
+          "menu_item_id": 2,
+          "quantity": 1
+        }
+      ],
+      "special_instructions": "Extra hot for the latte"
+    },
+    {
+      "customer_id": 2,
+      "items": [
+        {
+          "menu_item_id": 2,
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "customer_id": 3,
+      "items": [
+        {
+          "menu_item_id": 10,
+          "quantity": 1
+        },
+        {
+          "menu_item_id": 3,
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "customer_id": 4,
+      "items": [
+        {
+          "menu_item_id": 4,
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "customer_id": 5,
+      "items": [
+        {
+          "menu_item_id": 9,
+          "quantity": 1
+        }
+      ]
+    }
+  ]
+}
