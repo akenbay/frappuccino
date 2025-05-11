@@ -30,7 +30,8 @@ CREATE TYPE payment_method AS ENUM (
 CREATE TYPE transaction_type AS ENUM (
     'order_usage',
     'order_deletion',
-    'adjustment'
+    'adjustment',
+    'order_update'
 );
 
 -- ========================
