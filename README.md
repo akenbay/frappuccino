@@ -1,9 +1,5 @@
 # frappuccino
 
-### entity relationship diagram:
-
-<img src="img/ERD.png" alt="entity relationship diagram">
-
 # Frappuccino Order Management System
 
 ## Overview
@@ -184,9 +180,9 @@ curl "http://localhost:9090/reports/sales?start_date=2023-01-01&end_date=2023-01
 
 ## Database Schema
 
-![Database Schema Diagram](docs/db_schema.png
+### entity relationship diagram:
 
-[Describe key tables and relationships]
+<img src="img/ERD.png" alt="entity relationship diagram">
 
 ## Configuration
 
