@@ -65,5 +65,5 @@ func (s *inventoryService) GetLeftOversWithPagination(ctx context.Context, sortB
 	if page <= 0 {
 		return models.PaginatedInventoryResponse{}, models.ErrInvalidPage
 	}
-	return s.GetLeftOversWithPagination(ctx, sortBy, page, pageSize)
+	return s.inventoryRepo.GetLeftOversWithPagination(ctx, sortBy, page, pageSize)
 }

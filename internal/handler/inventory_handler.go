@@ -113,3 +113,40 @@ func (h *InventoryHandler) DeleteIngredient(w http.ResponseWriter, r *http.Reque
 		"message": "Ingredient deleted successfully",
 	})
 }
+
+func (h *InventoryHandler) GetLeftOversWithPagination(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+
+	sortBy := query.Get("sortBy")
+
+	pageStr := query.Get("page")
+	if pageStr == "" {
+		pageStr = "1"
+	}
+
+	pageSizeStr := query.Get("pageSize")
+	if pageSizeStr == "" {
+		pageSizeStr = "10"
+	}
+
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page <= 0 {
+		http.Error(w, "Invalid page number", http.StatusBadRequest)
+		return
+	}
+
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	if err != nil || pageSize <= 0 {
+		http.Error(w, "Invalid page size", http.StatusBadRequest)
+		return
+	}
+
+	leftovers, err := h.inventoryService.GetLeftOversWithPagination(r.Context(), sortBy, page, pageSize)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get leftovers: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(leftovers)
+}

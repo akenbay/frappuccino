@@ -214,7 +214,7 @@ func (r *menuRepository) UpdateMenuItem(ctx context.Context, id int, item models
 	}
 
 	res, err := tx.ExecContext(ctx, `
-		UPDATE menu_items SET name = $1, description = $2, price = $3, category = $4, is_active = $5
+		UPDATE menu_items SET name = $1, description = $2, price = $3, category = $4, is_active = $5, updated_at = NOW()
 		WHERE id = $6`,
 		item.Name, item.Description, item.Price, pq.Array(item.Category), item.IsActive, id)
 	if err != nil {

@@ -28,11 +28,15 @@ func NewInventoryRepository(db *sql.DB) InventoryRepository {
 
 func (r *inventoryRepository) CreateIngredient(ctx context.Context, ingredient models.Inventory) (int, error) {
 	var id int
+	var supplier_info interface{} = nil
+	if len(ingredient.SupplierInfo) > 0 {
+		supplier_info = ingredient.SupplierInfo
+	}
 	err := r.db.QueryRowContext(ctx, `
 		INSERT INTO inventory (name, quantity, unit, cost_per_unit, reorder_level, supplier_info) 
-		VALUES ($1, $2, $3, $4, $5)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id`,
-		ingredient.Name, ingredient.Quantity, ingredient.Unit, ingredient.CostPerUnit, ingredient.ReOrderLevel, ingredient.SupplierInfo,
+		ingredient.Name, ingredient.Quantity, ingredient.Unit, ingredient.CostPerUnit, ingredient.ReOrderLevel, supplier_info,
 	).Scan(&id)
 
 	if err != nil {
@@ -49,6 +53,7 @@ func (r *inventoryRepository) GetAllIngredients(ctx context.Context) ([]models.I
             name,
             quantity,
             unit,
+			cost_per_unit,
             reorder_level,
             supplier_info,
             created_at, 
@@ -62,7 +67,7 @@ func (r *inventoryRepository) GetAllIngredients(ctx context.Context) ([]models.I
 	var inventory []models.Inventory
 	for rows.Next() {
 		var ingredient models.Inventory
-		err := rows.Scan(&ingredient.ID, &ingredient.Name, &ingredient.Quantity, &ingredient.Unit, &ingredient.ReOrderLevel, &ingredient.SupplierInfo, &ingredient.CreatedAt, &ingredient.UpdatedAt)
+		err := rows.Scan(&ingredient.ID, &ingredient.Name, &ingredient.Quantity, &ingredient.Unit, &ingredient.CostPerUnit, &ingredient.ReOrderLevel, &ingredient.SupplierInfo, &ingredient.CreatedAt, &ingredient.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan ingredient: %w", err)
 		}
@@ -81,6 +86,7 @@ func (r *inventoryRepository) GetIngredientByID(ctx context.Context, id int) (mo
             name,
             quantity,
             unit,
+			cost_per_unit,
             reorder_level,
             supplier_info,
             created_at, 
@@ -91,6 +97,7 @@ func (r *inventoryRepository) GetIngredientByID(ctx context.Context, id int) (mo
 		&ingredient.Name,
 		&ingredient.Quantity,
 		&ingredient.Unit,
+		&ingredient.CostPerUnit,
 		&ingredient.ReOrderLevel,
 		&ingredient.SupplierInfo,
 		&ingredient.CreatedAt,
@@ -115,6 +122,11 @@ func (r *inventoryRepository) UpdateIngredient(ctx context.Context, id int, ingr
 	}
 	defer tx.Rollback()
 
+	var supplier_info interface{} = nil
+	if len(ingredient.SupplierInfo) > 0 {
+		supplier_info = ingredient.SupplierInfo
+	}
+
 	// Update ingredient metadata
 	result, err := tx.ExecContext(ctx, `
         UPDATE inventory 
@@ -132,7 +144,7 @@ func (r *inventoryRepository) UpdateIngredient(ctx context.Context, id int, ingr
 		ingredient.Unit,
 		ingredient.CostPerUnit,
 		ingredient.ReOrderLevel,
-		ingredient.SupplierInfo,
+		supplier_info,
 		id,
 	)
 	if err != nil {

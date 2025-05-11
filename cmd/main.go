@@ -139,18 +139,19 @@ func NewRouter(
 	mux.HandleFunc("GET /reports/popular-items", reportHandler.GetPopularItems)                //works
 
 	// Inventory routes
-	mux.HandleFunc("POST /inventory", inventoryHanlder.CreateIngredient)
-	mux.HandleFunc("GET /inventory/{id}", inventoryHanlder.GetIngredient)
-	mux.HandleFunc("PUT /inventory/{id}", inventoryHanlder.UpdateIngredient)
-	mux.HandleFunc("DELETE /inventory/{id}", inventoryHanlder.DeleteIngredient)
-	mux.HandleFunc("GET /inventory", inventoryHanlder.ListIngredients)
+	mux.HandleFunc("POST /inventory", inventoryHanlder.CreateIngredient)        // works
+	mux.HandleFunc("GET /inventory/{id}", inventoryHanlder.GetIngredient)       // works
+	mux.HandleFunc("PUT /inventory/{id}", inventoryHanlder.UpdateIngredient)    // works
+	mux.HandleFunc("DELETE /inventory/{id}", inventoryHanlder.DeleteIngredient) // works
+	mux.HandleFunc("GET /inventory", inventoryHanlder.ListIngredients)          // works
+	mux.HandleFunc("GET /inventory/getLeftOvers", inventoryHanlder.GetLeftOversWithPagination)
 
 	// Menu routes
-	mux.HandleFunc("POST /menu", menuHandler.CreateMenuItem)
-	mux.HandleFunc("GET /menu/{id}", menuHandler.GetMenuItem)
-	mux.HandleFunc("PUT /menu/{id}", menuHandler.UpdateMenuItem)
-	mux.HandleFunc("DELETE /menu/{id}", menuHandler.DeleteMenuItem)
-	mux.HandleFunc("GET /menu", menuHandler.ListMenuItems) //works
+	mux.HandleFunc("POST /menu", menuHandler.CreateMenuItem)        // works
+	mux.HandleFunc("GET /menu/{id}", menuHandler.GetMenuItem)       // works
+	mux.HandleFunc("PUT /menu/{id}", menuHandler.UpdateMenuItem)    // works
+	mux.HandleFunc("DELETE /menu/{id}", menuHandler.DeleteMenuItem) // works
+	mux.HandleFunc("GET /menu", menuHandler.ListMenuItems)          // works
 
 	// Health check
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
