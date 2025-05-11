@@ -1,0 +1,168 @@
+GET http://localhost:9090/reports/total-sales
+{
+    "total_sales": 250.25
+}
+
+GET http://localhost:9090/reports/popular-items
+[
+    {
+        "menu_item_id": 4,
+        "name": "Latte",
+        "order_count": 10,
+        "total_quantity": 14,
+        "percentage": 20.28985507246377
+    },
+    {
+        "menu_item_id": 5,
+        "name": "Cappuccino",
+        "order_count": 8,
+        "total_quantity": 12,
+        "percentage": 17.391304347826086
+    },
+    {
+        "menu_item_id": 10,
+        "name": "Blueberry Muffin",
+        "order_count": 8,
+        "total_quantity": 8,
+        "percentage": 11.594202898550725
+    },
+    {
+        "menu_item_id": 9,
+        "name": "Chocolate Cake",
+        "order_count": 7,
+        "total_quantity": 7,
+        "percentage": 10.144927536231885
+    },
+    {
+        "menu_item_id": 3,
+        "name": "Americano",
+        "order_count": 5,
+        "total_quantity": 6,
+        "percentage": 8.695652173913043
+    },
+    {
+        "menu_item_id": 6,
+        "name": "Iced Coffee",
+        "order_count": 5,
+        "total_quantity": 5,
+        "percentage": 7.246376811594203
+    },
+    {
+        "menu_item_id": 7,
+        "name": "Iced Latte",
+        "order_count": 5,
+        "total_quantity": 5,
+        "percentage": 7.246376811594203
+    },
+    {
+        "menu_item_id": 8,
+        "name": "Hot Chocolate",
+        "order_count": 5,
+        "total_quantity": 5,
+        "percentage": 7.246376811594203
+    },
+    {
+        "menu_item_id": 1,
+        "name": "Espresso",
+        "order_count": 3,
+        "total_quantity": 4,
+        "percentage": 5.797101449275362
+    },
+    {
+        "menu_item_id": 2,
+        "name": "Double Espresso",
+        "order_count": 3,
+        "total_quantity": 3,
+        "percentage": 4.3478260869565215
+    }
+]
+
+GET http://localhost:9090/reports/orderedItemsByPeriod?period=day&month=october
+{
+    "period_type": "day",
+    "month": "October",
+    "year": 2025,
+    "reports": null
+}
+
+
+GET http://localhost:9090/reports/orderedItemsByPeriod?period=day&month=may
+{
+    "period_type": "day",
+    "month": "May",
+    "year": 2025,
+    "reports": [
+        {
+            "period": 5,
+            "order_count": 2,
+            "total_sales": 16
+        },
+        {
+            "period": 7,
+            "order_count": 1,
+            "total_sales": 5.25
+        },
+        {
+            "period": 8,
+            "order_count": 1,
+            "total_sales": 9.75
+        },
+        {
+            "period": 9,
+            "order_count": 2,
+            "total_sales": 20.5
+        },
+        {
+            "period": 10,
+            "order_count": 9,
+            "total_sales": 75.75
+        }
+    ]
+}
+
+GET http://localhost:9090/reports/orderedItemsByPeriod?period=month&year=2025
+{
+    "period_type": "month",
+    "year": 2025,
+    "reports": [
+        {
+            "period": "January  ",
+            "order_count": 2,
+            "total_sales": 14.25
+        },
+        {
+            "period": "February ",
+            "order_count": 2,
+            "total_sales": 18.25
+        },
+        {
+            "period": "March    ",
+            "order_count": 2,
+            "total_sales": 17.25
+        },
+        {
+            "period": "April    ",
+            "order_count": 7,
+            "total_sales": 55.5
+        },
+        {
+            "period": "May      ",
+            "order_count": 15,
+            "total_sales": 127.25
+        }
+    ]
+}
+
+GET http://localhost:9090/reports/search?q=chocolate cake&filter=menu,orders&minPrice=1
+{
+    "menu_items": [
+        {
+            "id": 9,
+            "name": "Chocolate Cake",
+            "description": "Rich chocolate dessert with layers of ganache",
+            "price": 5.5,
+            "relevance": 0.9966189
+        }
+    ],
+    "total_matches": 1
+}
