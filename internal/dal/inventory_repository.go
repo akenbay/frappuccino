@@ -38,7 +38,6 @@ func (r *inventoryRepository) CreateIngredient(ctx context.Context, ingredient m
 		RETURNING id`,
 		ingredient.Name, ingredient.Quantity, ingredient.Unit, ingredient.CostPerUnit, ingredient.ReOrderLevel, supplier_info,
 	).Scan(&id)
-
 	if err != nil {
 		return 0, err
 	}
@@ -103,7 +102,6 @@ func (r *inventoryRepository) GetIngredientByID(ctx context.Context, id int) (mo
 		&ingredient.CreatedAt,
 		&ingredient.UpdatedAt,
 	)
-
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return models.Inventory{}, fmt.Errorf("ingredient not found: %w", err)
