@@ -24,10 +24,6 @@ Frappuccino is a comprehensive order management system designed for coffee shops
 
 `http://localhost:9090/`
 
-### Authentication
-
-[Describe your authentication method here]
-
 ### Endpoints
 
 #### Order Endpoints
@@ -76,43 +72,108 @@ Frappuccino is a comprehensive order management system designed for coffee shops
 - Go 1.21+
 - PostgreSQL 15+
 
-### Docker Setup
-
-```bash
-docker-compose up
-```
-
-## Testing
-
-Run unit tests:
-
-```bash
-make test
-```
-
-Run integration tests:
-
-```bash
-make test-integration
-```
-
 ## Examples
+
+### Batch Order
+
+```
+POST http://localhost:9090/orders/batch-process
+
+{
+  "orders": [
+    {
+      "customer_id": 1,
+      "items": [
+        {
+          "menu_item_id": 2,
+          "quantity": 2,
+          "customizations": {
+            "milk": "oat",
+            "size": "large"
+          }
+        },
+        {
+          "menu_item_id": 2,
+          "quantity": 1
+        }
+      ],
+      "special_instructions": "Extra hot for the latte"
+    },
+    {
+      "customer_id": 2,
+      "items": [
+        {
+          "menu_item_id": 2,
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "customer_id": 3,
+      "items": [
+        {
+          "menu_item_id": 10,
+          "quantity": 1
+        },
+        {
+          "menu_item_id": 3,
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "customer_id": 4,
+      "items": [
+        {
+          "menu_item_id": 4,
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "customer_id": 5,
+      "items": [
+        {
+          "menu_item_id": 9,
+          "quantity": 1
+        }
+      ]
+    }
+  ]
+}
+```
 
 ### Create an Order
 
-```bash
-curl -X POST http://localhost:9090/orders \
-  -H "Content-Type: application/json" \
-  -d '{
-    "customer_id": 1,
+```
+POST http://localhost:9090/orders
+
+{
+  "customer_id": 1,
+    "payment_method": "credit_card",
     "items": [
       {
         "menu_item_id": 4,
         "quantity": 2,
-        "customizations": {"milk": "almond"}
+        "price_at_order": 3.75,
+        "customizations": {
+          "milk": "oat",
+          "extra_shot": true
+        }
+      },
+      {
+        "menu_item_id": 9,
+        "quantity": 1,
+        "price_at_order": 5.50,
+        "customizations": {
+          "whipped_cream": "extra"
+        }
       }
-    ]
-  }'
+    ],
+    "special_instructions": {
+      "notes": "Extra hot, please hurry!"
+    }
+}
 ```
 
 ### Get Sales Report
@@ -142,7 +203,7 @@ SERVER_PORT=9090
 
 ## License
 
-[MIT License](LICENSE
+[MIT License](LICENSE)
 
 ## Support
 
