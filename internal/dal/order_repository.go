@@ -54,7 +54,7 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order) (
 	}
 
 	// Calculate total price based on items
-	totalPrice, err := r.calculateOrderTotal(ctx, tx, order.Items)
+	totalPrice, err := r.calculateOrderTotal(ctx, order.Items)
 	if err != nil {
 		return 0, fmt.Errorf("failed to calculate order total: %w", err)
 	}
@@ -67,11 +67,15 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order) (
 	if len(order.SpecialInstructions) > 0 {
 		special_instructions = order.SpecialInstructions
 	}
+	var paymentMethod interface{} = nil
+	if len(order.PaymentMethod) > 0 {
+		paymentMethod = order.PaymentMethod
+	}
 	err = tx.QueryRowContext(ctx, `
 		INSERT INTO orders (customer_id, payment_method, total_price, special_instructions) 
 		VALUES ($1, $2, $3, $4)
 		RETURNING id`,
-		order.CustomerID, order.PaymentMethod, order.TotalPrice, special_instructions,
+		order.CustomerID, paymentMethod, order.TotalPrice, special_instructions,
 	).Scan(&id)
 
 	if err != nil {
@@ -240,7 +244,7 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, id int, updatedOrder 
 	defer tx.Rollback()
 
 	// Calculate new total price
-	totalPrice, err := r.calculateOrderTotal(ctx, tx, updatedOrder.Items)
+	totalPrice, err := r.calculateOrderTotal(ctx, updatedOrder.Items)
 	if err != nil {
 		return fmt.Errorf("failed to calculate order total: %w", err)
 	}
@@ -761,21 +765,6 @@ func (r *orderRepository) BatchProcessOrders(ctx context.Context, orders []model
 		return models.BatchOrderResponse{}, models.ErrEmptyBatch
 	}
 
-	// Start transaction with context
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{
-		Isolation: sql.LevelSerializable,
-	})
-	if err != nil {
-		return models.BatchOrderResponse{}, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-
-	// Ensure we rollback if anything fails
-	defer func() {
-		if err != nil {
-			tx.Rollback()
-		}
-	}()
-
 	response := models.BatchOrderResponse{
 		ProcessedOrders: make([]models.ProcessedOrder, 0, len(orders)),
 		Summary: models.BatchSummary{
@@ -783,139 +772,102 @@ func (r *orderRepository) BatchProcessOrders(ctx context.Context, orders []model
 		},
 	}
 
-	inventoryUpdates := make(map[int]float64)
-
+	// Process orders one by one
 	for _, order := range orders {
-		// Validate each order before processing
-		if len(order.Items) == 0 {
-			response.ProcessedOrders = append(response.ProcessedOrders, models.ProcessedOrder{
-				Status:       "rejected",
-				Rejected:     true,
-				RejectReason: "empty order items",
-			})
-			response.Summary.Rejected++
-			continue
+
+		// First get customer details
+		var firstName, lastName string
+		err := r.db.QueryRowContext(ctx, `
+            SELECT first_name, last_name FROM customers WHERE id = $1`,
+			order.CustomerID).Scan(&firstName, &lastName)
+
+		if err != nil {
+			return models.BatchOrderResponse{}, fmt.Errorf("failed to get customer's name: %v", err)
+		}
+
+		order.TotalPrice, err = r.calculateOrderTotal(ctx, order.Items)
+
+		if err != nil {
+			return models.BatchOrderResponse{}, fmt.Errorf("failed to calculate total price of the order: %v", err)
 		}
 
 		processed := models.ProcessedOrder{
-			CustomerName: fmt.Sprintf("Customer %d", order.CustomerID),
+			CustomerName: fmt.Sprintf("%s %s", firstName, lastName),
 			Total:        order.TotalPrice,
 		}
 
-		// Check inventory with context
-		canFulfill, rejectReason := r.checkInventory(ctx, tx, order.Items, inventoryUpdates)
-		if !canFulfill {
+		// Validate each order before processing
+		if len(order.Items) == 0 {
 			processed.Status = "rejected"
 			processed.Rejected = true
-			processed.RejectReason = rejectReason
-			response.Summary.Rejected++
+			processed.RejectReason = "empty order items"
 			response.ProcessedOrders = append(response.ProcessedOrders, processed)
+			response.Summary.Rejected++
 			continue
 		}
 
-		// Process order within the same transaction
-		var orderID int
-		err = tx.QueryRowContext(ctx, `
-            INSERT INTO orders (customer_id, status, total_price) 
-            VALUES ($1, 'pending', $2)
-            RETURNING id`,
-			order.CustomerID, order.TotalPrice).Scan(&orderID)
+		// Use the existing CreateOrder function
+		orderID, err := r.CreateOrder(ctx, order)
 		if err != nil {
-			return models.BatchOrderResponse{}, fmt.Errorf("failed to create order: %w", err)
+			processed.Status = "rejected"
+			processed.Rejected = true
+			processed.RejectReason = err.Error()
+			response.Summary.Rejected++
+		} else {
+			processed.OrderID = orderID
+			processed.Status = "accepted"
+			response.Summary.Accepted++
+			response.Summary.TotalRevenue += order.TotalPrice
 		}
 
-		// Insert order items
-		for _, item := range order.Items {
-			_, err = tx.ExecContext(ctx, `
-                INSERT INTO order_items (order_id, menu_item_id, quantity, price_at_order)
-                VALUES ($1, $2, $3, $4)`,
-				orderID, item.MenuItemID, item.Quantity, item.PriceAtOrder)
-			if err != nil {
-				return models.BatchOrderResponse{}, fmt.Errorf("failed to add order item: %w", err)
-			}
-		}
-
-		processed.OrderID = orderID
-		processed.Status = "accepted"
-		response.Summary.Accepted++
 		response.ProcessedOrders = append(response.ProcessedOrders, processed)
-		response.Summary.TotalRevenue += order.TotalPrice
 	}
 
-	// Prepare inventory report
-	for id, qty := range inventoryUpdates {
-		var name string
-		var remaining float64
-		err = tx.QueryRowContext(ctx, `
-            SELECT name, quantity FROM inventory WHERE id = $1`, id).Scan(&name, &remaining)
-		if err != nil {
-			return models.BatchOrderResponse{}, fmt.Errorf("failed to get inventory info: %w", err)
-		}
+	// Generate inventory report after all orders are processed
+	inventoryReport, err := r.generateInventoryReport(ctx)
+	if err != nil {
+		// We still return the order processing results, just log the inventory error
 
-		response.Summary.InventoryUsed = append(response.Summary.InventoryUsed, models.InventoryUsage{
-			IngredientID:   id,
-			Name:           name,
-			QuantityUsed:   qty,
-			RemainingStock: remaining,
-		})
+		return models.BatchOrderResponse{}, fmt.Errorf("failed to generate inventory report: %v", err)
+	} else {
+		response.Summary.InventoryUsed = inventoryReport
 	}
 
 	response.Summary.TotalOrders = len(orders)
-
-	// Commit transaction
-	if err = tx.Commit(); err != nil {
-		return models.BatchOrderResponse{}, fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
 	return response, nil
 }
 
-// Helper functions
-func (r *orderRepository) checkInventory(ctx context.Context, tx *sql.Tx, items []models.OrderItem, inventoryUpdates map[int]float64) (bool, string) {
-	for _, item := range items {
-		// Get required ingredients for this menu item
-		rows, err := tx.QueryContext(ctx, `
-			SELECT ingredient_id, quantity 
-			FROM menu_item_ingredients 
-			WHERE menu_item_id = $1`, item.MenuItemID)
-		if err != nil {
-			return false, "inventory check failed"
-		}
-
-		for rows.Next() {
-			var ingredientID int
-			var requiredQty float64
-			if err := rows.Scan(&ingredientID, &requiredQty); err != nil {
-				return false, "inventory check failed"
-			}
-
-			totalNeeded := requiredQty * float64(item.Quantity)
-			var currentStock float64
-			err := tx.QueryRowContext(ctx, `
-				SELECT quantity FROM inventory WHERE id = $1`, ingredientID).Scan(&currentStock)
-			if err != nil {
-				return false, "ingredient not found"
-			}
-
-			// Account for previously used inventory in this batch
-			alreadyUsed := inventoryUpdates[ingredientID]
-			if currentStock-alreadyUsed < totalNeeded {
-				return false, fmt.Sprintf("insufficient stock for ingredient %d", ingredientID)
-			}
-
-			inventoryUpdates[ingredientID] = alreadyUsed + totalNeeded
-		}
+func (r *orderRepository) generateInventoryReport(ctx context.Context) ([]models.InventoryUsage, error) {
+	rows, err := r.db.QueryContext(ctx, `
+        SELECT id, name, quantity FROM inventory`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query inventory: %w", err)
 	}
-	return true, ""
+	defer rows.Close()
+
+	var report []models.InventoryUsage
+	for rows.Next() {
+		var item models.InventoryUsage
+		if err := rows.Scan(&item.IngredientID, &item.Name, &item.RemainingStock); err != nil {
+			return nil, fmt.Errorf("failed to scan inventory row: %w", err)
+		}
+		report = append(report, item)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error reading inventory rows: %w", err)
+	}
+
+	return report, nil
 }
 
-func (r *orderRepository) calculateOrderTotal(ctx context.Context, tx *sql.Tx, items []models.OrderItem) (float64, error) {
+func (r *orderRepository) calculateOrderTotal(ctx context.Context, items []models.OrderItem) (float64, error) {
 	var total float64
 
 	for _, item := range items {
 		// Get current price of the menu item
 		var price float64
-		err := tx.QueryRowContext(ctx, `
+		err := r.db.QueryRowContext(ctx, `
             SELECT price FROM menu_items 
             WHERE id = $1`, item.MenuItemID).Scan(&price)
 		if err != nil {
