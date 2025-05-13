@@ -4,9 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"frappuccino/internal/models"
 	"strings"
 	"time"
+
+	"frappuccino/internal/models"
 
 	"github.com/lib/pq"
 )

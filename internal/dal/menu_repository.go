@@ -42,7 +42,6 @@ func (r *menuRepository) CreateMenuItem(ctx context.Context, menuitem models.Men
 		RETURNING id`,
 		menuitem.Name, menuitem.Description, menuitem.Price, pq.Array(menuitem.Category),
 	).Scan(&id)
-
 	if err != nil {
 		return 0, fmt.Errorf("failed to create menu item: %w", err)
 	}
@@ -158,7 +157,6 @@ func (r *menuRepository) GetMenuItemByID(ctx context.Context, id int) (models.Me
 		&menuitem.CreatedAt,
 		&menuitem.UpdatedAt,
 	)
-
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return models.MenuItems{}, fmt.Errorf("menu item not found: %w", err)

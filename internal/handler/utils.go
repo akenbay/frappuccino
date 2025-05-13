@@ -2,9 +2,10 @@ package handler
 
 import (
 	"encoding/json"
-	"frappuccino/internal/models"
 	"net/http"
 	"time"
+
+	"frappuccino/internal/models"
 )
 
 func respondWithError(w http.ResponseWriter, code int, message string) {

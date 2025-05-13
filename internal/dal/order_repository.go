@@ -6,8 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"frappuccino/internal/models"
 	"strings"
+
+	"frappuccino/internal/models"
 
 	"github.com/lib/pq"
 )
@@ -79,7 +80,6 @@ func (r *orderRepository) CreateOrder(ctx context.Context, order models.Order) (
 		RETURNING id`,
 		order.CustomerID, paymentMethod, order.TotalPrice, special_instructions,
 	).Scan(&id)
-
 	if err != nil {
 		return 0, fmt.Errorf("failed to create order: %w", err)
 	}
@@ -795,7 +795,6 @@ func (r *orderRepository) BatchProcessOrders(ctx context.Context, orders []model
 		}
 
 		order.TotalPrice, err = r.calculateOrderTotal(ctx, order.Items)
-
 		if err != nil {
 			return models.BatchOrderResponse{}, fmt.Errorf("failed to calculate total price of the ordered item: %w", err)
 		}
