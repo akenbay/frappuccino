@@ -14,6 +14,17 @@ Frappuccino is a comprehensive order management system designed for coffee shops
 - **Search**: Full-text search across menu items, orders, and ingredients
 - **Batch Processing**: Handle multiple orders in a single transaction
 
+## Setup
+
+1. Clone the repos:
+   ```bash
+   git clone https://github.com/akenbay/frappuccino.git
+   cd frappuccino
+2. Run the server
+   ```bash
+   docker-compose up
+3. Make requests through Postman or curl
+
 ## API Documentation
 
 ### Base URL
@@ -201,6 +212,12 @@ SERVER_PORT=9090
 
 [MIT License](LICENSE)
 
-## Support
+### Author 
+This project has been created by:
 
-For support, please open an issue or contact [your email].
+Aibar Kenbay
+
+Contacts:
+- email: akenbay@icloud.com
+- [GitHub](https://github.com/akenbay/)
+- [LinkedIn](https://www.linkedin.com/in/aibar-kenbay-29394b2a4/)
